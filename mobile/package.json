@@ -1,0 +1,13 @@
+{
+  "name": "energy-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

@@ -6,17 +6,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { EnergyRing } from "@/components/EnergyRing";
 import { QuickAction } from "@/components/QuickAction";
 import { StatCard } from "@/components/StatCard";
+import { useTodayTotalMg } from "@/features/caffeine/store";
 import { colors, spacing } from "@/utils/theme";
 
-// Placeholder values — these will come from real logging + the math engine in later steps.
+// Placeholder values — these will come from the math engine and sleep tracking in later steps.
 const placeholder = {
   energy: 82,
   steadyEnergyLeft: "~6h 30m",
   sleep: "7h 42m",
-  caffeineMg: 120,
 };
 
 export default function HomeScreen() {
+  const caffeineMg = useTodayTotalMg();
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -35,12 +37,12 @@ export default function HomeScreen() {
 
         <View style={styles.row}>
           <StatCard icon="bed-outline" label="Sleep" value={placeholder.sleep} />
-          <StatCard icon="cafe-outline" label="Caffeine" value={`${placeholder.caffeineMg} mg`} />
+          <StatCard icon="cafe-outline" label="Caffeine" value={`${caffeineMg} mg`} />
         </View>
 
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.row}>
-          <QuickAction icon="cafe-outline" label="Log Caffeine" onPress={() => router.navigate("/caffeine")} />
+          <QuickAction icon="cafe-outline" label="Log Caffeine" onPress={() => router.push("/log-drink")} />
           <QuickAction icon="moon-outline" label="Start Sleep" onPress={() => router.navigate("/sleep")} />
           <QuickAction icon="bed-outline" label="Log Nap" />
         </View>

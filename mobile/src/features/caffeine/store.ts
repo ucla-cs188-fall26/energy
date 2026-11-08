@@ -27,6 +27,15 @@ export const useCaffeineStore = create<CaffeineState>()(
       name: "caffeine-entries",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({ entries: s.entries }),
+      // v0 entries had `presetId` and no `durationMinutes`.
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as { entries?: Partial<CaffeineEntry>[] };
+        if (version < 1) {
+          state.entries = (state.entries ?? []).map((e) => ({ durationMinutes: 10, ...e }));
+        }
+        return state as Pick<CaffeineState, "entries">;
+      },
     },
   ),
 );

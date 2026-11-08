@@ -4,13 +4,18 @@ import { ComponentProps } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { presetIcon } from "@/features/caffeine/presets";
+import { categoryIcon } from "@/features/caffeine/catalog";
 import { useCaffeineStore, useTodayEntries, useTodayTotalMg } from "@/features/caffeine/store";
 import { CaffeineEntry } from "@/features/caffeine/types";
 import { colors, radius, spacing } from "@/utils/theme";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatDuration(minutes: number) {
+  if (minutes < 30) return "";
+  return minutes < 60 ? ` · over ~${minutes} min` : ` · over ~${minutes / 60}h`;
 }
 
 export default function CaffeineScreen() {
@@ -60,11 +65,12 @@ export default function CaffeineScreen() {
           <View style={styles.card}>
             {today.map((e, i) => (
               <View key={e.id} style={[styles.drinkRow, i > 0 && styles.drinkRowDivider]}>
-                <Ionicons name={presetIcon(e.presetId)} size={22} color={colors.primary} />
+                <Ionicons name={categoryIcon(e.categoryId)} size={22} color={colors.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.drinkName}>{e.name}</Text>
                   <Text style={styles.muted}>
                     {e.mg} mg · {formatTime(e.consumedAt)}
+                    {formatDuration(e.durationMinutes)}
                   </Text>
                 </View>
                 <Pressable onPress={() => confirmDelete(e)} hitSlop={10} accessibilityLabel={`Delete ${e.name}`}>

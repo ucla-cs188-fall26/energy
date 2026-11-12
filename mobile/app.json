@@ -2,7 +2,9 @@
   "expo": {
     "name": "Energy",
     "slug": "energy",
-    "scheme": "energy",
+    "scheme": "energyapp",
+    "ios": { "bundleIdentifier": "com.energyapp.mobile" },
+    "android": { "package": "com.energyapp.mobile" },
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

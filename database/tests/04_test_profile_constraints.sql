@@ -2,7 +2,7 @@ begin;
 
 do $$
 declare
-    test_user_id uuid := 'da8c649a-6832-4e22-9dbf-97a7bba49e40';
+    test_user_id uuid := 'YOUR_USER_UUID';
 begin
     -- Prepare an incomplete profile for testing.
     insert into public.user_profiles (id)

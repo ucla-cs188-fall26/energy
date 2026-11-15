@@ -6,8 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from energy_api.core.auth import get_auth_client
-from energy_api.core.config import Settings, get_settings
+from energy_api.core.config import get_settings
 from energy_api.main import app
+
+from .helpers import make_settings
 
 USER_ID = "a2b8c168-ff6b-4a2b-a9cb-3bc284bf5908"
 OTHER_ID = "311b169e-2609-4949-8031-d08adb491c41"
@@ -75,10 +77,7 @@ def api():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             yield client
 
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        _env_file=None, SUPABASE_URL="https://example.supabase.co",
-        SUPABASE_PUBLISHABLE_KEY="sb_publishable_test",
-    )
+    app.dependency_overrides[get_settings] = lambda: make_settings()
     app.dependency_overrides[get_auth_client] = mock_client
     try:
         with TestClient(app) as client:

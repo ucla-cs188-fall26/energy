@@ -5,7 +5,7 @@ set local role authenticated;
 
 select set_config(
     'request.jwt.claims',
-    '{"sub":"da8c649a-6832-4e22-9dbf-97a7bba49e40","role":"authenticated"}',
+    '{"sub":"YOUR_USER_UUID","role":"authenticated"}',
     true
 );
 

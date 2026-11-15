@@ -3,8 +3,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from energy_api.core.auth import get_auth_client
-from energy_api.core.config import Settings, get_settings
+from energy_api.core.config import get_settings
 from energy_api.main import app
+
+from .helpers import make_settings
 
 USER_ID = "a2b8c168-ff6b-4a2b-a9cb-3bc284bf5908"
 
@@ -29,10 +31,7 @@ def auth_client():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             yield client
 
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        _env_file=None, SUPABASE_URL="https://example.supabase.co",
-        SUPABASE_PUBLISHABLE_KEY="sb_publishable_test",
-    )
+    app.dependency_overrides[get_settings] = lambda: make_settings()
     app.dependency_overrides[get_auth_client] = mock_client
     try:
         with TestClient(app) as client:
@@ -93,9 +92,7 @@ def test_upstream_failure(auth_client, failure):
 
 def test_missing_configuration(auth_client):
     client, _, calls = auth_client
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        _env_file=None, SUPABASE_URL=None, SUPABASE_PUBLISHABLE_KEY=None,
-    )
+    app.dependency_overrides[get_settings] = lambda: make_settings(configured=False)
     assert client.get("/users/me", headers={"Authorization": "Bearer token"}).status_code == 503
     assert calls == []
 

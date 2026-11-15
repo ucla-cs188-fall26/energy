@@ -15,8 +15,10 @@ PREFERENCES = {
     "display_name": "Energy user", "usual_bedtime": "23:00:00",
     "usual_wake_time": "07:00:00", "sleep_goal_minutes": 480,
     "caffeine_frequency": "daily", "caffeine_sensitivity": "medium",
-    "selected_side_effects": ["sleep_disruption", "stomach_upset"],
+    "selected_side_effects": ["sleep_disruption", "energy_crash"],
     "initial_energy_rating": 7,
+    "sex": "female", "age_years": 29, "weight_kg": 70.5, "height_cm": 175.0,
+    "measurement_units": "imperial",
 }
 
 
@@ -26,6 +28,8 @@ def profile(**changes):
         "usual_wake_time": None, "sleep_goal_minutes": None,
         "caffeine_frequency": None, "caffeine_sensitivity": None,
         "selected_side_effects": [], "initial_energy_rating": None,
+        "sex": None, "age_years": None, "weight_kg": None, "height_cm": None,
+        "measurement_units": None,
         "preferences_completed": False,
         "created_at": "2026-11-11T00:00:00Z",
         "updated_at": "2026-11-11T00:00:00Z", **changes,
@@ -144,6 +148,11 @@ def test_draft_and_explicit_null(api):
     {"caffeine_frequency": "hourly"}, {"caffeine_sensitivity": "unknown"},
     {"selected_side_effects": ["unknown"]}, {"selected_side_effects": None},
     {"selected_side_effects": ["jitters", "jitters"]},
+    {"caffeine_frequency": "occasionally"}, {"selected_side_effects": ["palpitations"]},
+    {"sex": "other"}, {"sex": "undisclosed"}, {"age_years": 12}, {"age_years": 121}, {"age_years": 29.5},
+    {"weight_kg": 19.9}, {"weight_kg": 401}, {"weight_kg": "70"}, {"weight_kg": True},
+    {"height_cm": 49}, {"height_cm": 273}, {"height_cm": "175"},
+    {"measurement_units": "stone"},
     {"id": OTHER_ID}, {"preferences_completed": True},
     {"created_at": "2026-01-01T00:00:00Z"}, {"onboarding_completed": True},
 ])

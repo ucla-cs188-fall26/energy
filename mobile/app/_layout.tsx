@@ -2,6 +2,7 @@ import { router, Stack } from "expo-router";
 import { useEffect, useRef } from "react";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
+import { useSyncOnboardingProfile } from "@/features/onboarding/sync";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { EmailAuthProvider, useEmailAuth } from "@/hooks/useEmailAuth";
 import { AUTHENTICATED_DESTINATION } from "@/services/auth-links";
@@ -15,6 +16,7 @@ function Navigation() {
   const { ready, processing, recovery, success, error, resultId } = useEmailAuth();
   const handledResult = useRef(0);
   const waiting = loading || !ready || processing;
+  useSyncOnboardingProfile();
 
   useEffect(() => {
     if (waiting || resultId <= handledResult.current) return;
@@ -33,11 +35,18 @@ function Navigation() {
         <Stack.Protected guard={!!session && recovery}>
           <Stack.Screen name="auth/reset-password" />
         </Stack.Protected>
-        <Stack.Protected guard={!!session && !recovery}>
+        {/* Signed-out users who land on the app's home route go to the Welcome screen. */}
+        <Stack.Protected guard={!!session && !recovery} redirectTo="/(auth)/welcome">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="log-drink" options={{ presentation: "modal" }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
+          <Stack.Screen name="(auth)/welcome" />
+          <Stack.Screen name="(auth)/onboarding/frequency" />
+          <Stack.Screen name="(auth)/onboarding/side-effects" />
+          <Stack.Screen name="(auth)/onboarding/sleep" />
+          <Stack.Screen name="(auth)/onboarding/about-you" />
+          <Stack.Screen name="(auth)/signup" />
           <Stack.Screen name="(auth)/login" />
           <Stack.Screen name="auth/forgot-password" />
         </Stack.Protected>

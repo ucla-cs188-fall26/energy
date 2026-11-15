@@ -24,6 +24,7 @@ Module._load = function (name, ...args) {
   if (name === '@/hooks/useAuth') return { AuthProvider: passthrough, useAuth: () => auth };
   if (name === '@/hooks/useEmailAuth') return { EmailAuthProvider: passthrough, useEmailAuth: () => email };
   if (name === '@/services/auth-links') return { AUTHENTICATED_DESTINATION: '/(tabs)' };
+  if (name === '@/features/onboarding/sync') return { useSyncOnboardingProfile: () => {} };
   return load.call(this, name, ...args);
 };
 require.extensions['.tsx'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {

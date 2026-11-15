@@ -6,9 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
-CaffeineFrequency = Literal["never", "occasionally", "daily"]
+CaffeineFrequency = Literal["daily", "few_times_week", "rarely", "never"]
 CaffeineSensitivity = Literal["low", "medium", "high"]
-SideEffect = Literal["jitters", "anxiety", "palpitations", "sleep_disruption", "stomach_upset"]
+SideEffect = Literal[
+    "jitters", "anxiety", "headaches", "sleep_disruption", "stomach_upset", "energy_crash",
+]
+Sex = Literal["female", "male"]
+MeasurementUnits = Literal["metric", "imperial"]
 
 
 class ProfilePreferences(BaseModel):
@@ -24,6 +28,17 @@ class ProfilePreferences(BaseModel):
     caffeine_sensitivity: CaffeineSensitivity | None = None
     selected_side_effects: list[SideEffect] = Field(default_factory=list)
     initial_energy_rating: Annotated[StrictInt, Field(ge=1, le=10)] | None = None
+    sex: Sex | None = None
+    age_years: Annotated[StrictInt, Field(ge=13, le=120)] | None = None
+    # Stored metric with one decimal place (numeric(4, 1) in the database).
+    weight_kg: Annotated[float, Field(strict=True, ge=20, le=400)] | None = None
+    height_cm: Annotated[float, Field(strict=True, ge=50, le=272)] | None = None
+    measurement_units: MeasurementUnits | None = None
+
+    @field_validator("weight_kg", "height_cm")
+    @classmethod
+    def round_measurement(cls, value: float | None) -> float | None:
+        return None if value is None else round(value, 1)
 
     @field_validator("display_name")
     @classmethod

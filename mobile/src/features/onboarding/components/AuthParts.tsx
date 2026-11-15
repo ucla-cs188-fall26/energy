@@ -1,20 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { Href, router } from "expo-router";
 import { ReactNode, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInputProps } from "react-native";
 
 import { colors } from "@/utils/theme";
 import { TextField } from "./TextField";
 
-/** Back chevron; falls back to Welcome when there's no screen to go back to. */
-export function BackButton() {
+/** Back chevron; goes to `fallback` (Welcome by default) when there's no screen to go back to. */
+export function BackButton({ fallback = "/(auth)/welcome" }: { fallback?: Href }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Back"
       hitSlop={12}
       style={styles.back}
-      onPress={() => (router.canGoBack() ? router.back() : router.replace("/(auth)/welcome"))}
+      onPress={() => (router.canGoBack() ? router.back() : router.replace(fallback))}
     >
       <Ionicons name="chevron-back" size={26} color={colors.text} />
     </Pressable>

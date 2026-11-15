@@ -18,14 +18,14 @@ const SUCCESS_SOFT = "#E7F6EC";
 export default function SignupScreen() {
   const { signUp } = useAuth();
   const setAnswers = useOnboardingStore((s) => s.set);
-  const [firstName, setFirstName] = useState(useOnboardingStore.getState().firstName ?? "");
+  const [fullName, setFullName] = useState(useOnboardingStore.getState().fullName ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  const name = firstName.trim();
+  const name = fullName.trim().replace(/\s+/g, " ");
   const canSubmit = !!name && !!email.trim() && password.length >= MIN_PASSWORD && !busy;
 
   async function submit() {
@@ -33,7 +33,7 @@ export default function SignupScreen() {
     setBusy(true);
     // Mark answers for saving before signUp: with email confirmation off, a
     // session (and the save) can start before signUp even returns.
-    setAnswers({ firstName: name, signupEmail: email.trim(), pendingSync: true });
+    setAnswers({ fullName: name, signupEmail: email.trim(), pendingSync: true });
     try {
       const data = await signUp(email, password);
       if (!data.session) setSentTo(email.trim());
@@ -78,8 +78,9 @@ export default function SignupScreen() {
           <Text style={authStyles.subtitle}>Save your profile and keep your sleep and caffeine history synced.</Text>
 
           <View style={styles.form}>
-            <TextField label="First name" placeholder="Alex" value={firstName} onChangeText={setFirstName}
-              autoComplete="given-name" textContentType="givenName" maxLength={80} editable={!busy} />
+            <TextField label="Full name" placeholder="Alex Smith" value={fullName} onChangeText={setFullName}
+              autoComplete="name" textContentType="name" autoCapitalize="words" maxLength={80}
+              editable={!busy} />
             <TextField label="Email" placeholder="you@example.com" value={email} onChangeText={setEmail}
               autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email"
               textContentType="emailAddress" editable={!busy} />

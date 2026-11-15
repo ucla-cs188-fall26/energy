@@ -120,24 +120,6 @@ export const DRINK_CATEGORIES: DrinkCategory[] = [
       { id: "dr-pepper", label: "Dr Pepper", size: "12 oz", mg: 41 },
     ],
   },
-  {
-    id: "preworkout",
-    name: "Pre-workout",
-    icon: "barbell",
-    options: [
-      { id: "preworkout-scoop", label: "Pre-workout", size: "1 scoop", mg: 200 },
-      { id: "c4-original-scoop", label: "C4 Original", size: "1 scoop", mg: 150 },
-    ],
-  },
-  {
-    id: "pill",
-    name: "Caffeine Pill",
-    icon: "medkit",
-    options: [
-      { id: "pill-200", label: "Caffeine pill", size: "200 mg tablet", mg: 200 },
-      { id: "pill-100", label: "Caffeine pill", size: "100 mg tablet", mg: 100 },
-    ],
-  },
   { id: "other", name: "Other", icon: "add-circle-outline", options: [] },
 ];
 

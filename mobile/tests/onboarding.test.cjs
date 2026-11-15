@@ -15,6 +15,7 @@ Module._load = function (name, ...args) {
   };
   if (name === '@/hooks/useAuth') return { useAuth: () => ({ session: null }) };
   if (name === '@/services/api') return { saveProfile: async () => {}, completePreferences: async () => {} };
+  if (name === '@/features/profile/store') return { useProfileStore: { getState: () => ({ setProfile: () => {} }) } };
   if (name === './store') return load.call(this, path.join(__dirname, '../src/features/onboarding/store.ts'), ...args);
   return load.call(this, name, ...args);
 };
@@ -59,10 +60,10 @@ test('answers map to backend profile fields', () => {
     sideEffects: ['jitters', 'energy_crash'],
     sensitivity: 'high',
     sex: 'female', ageYears: 29, weightKg: 70, heightCm: 175,
-    firstName: 'Alex',
+    fullName: 'Alex Smith',
   });
   assert.deepEqual(prefs, {
-    display_name: 'Alex',
+    display_name: 'Alex Smith',
     usual_bedtime: '23:00',
     usual_wake_time: '07:00',
     sleep_goal_minutes: 480,

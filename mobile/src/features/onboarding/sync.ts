@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useProfileStore } from "@/features/profile/store";
 import { completePreferences, ProfilePreferences, saveProfile } from "@/services/api";
 import { OnboardingAnswers, sleepWindowMinutes, toApiTime, useOnboardingStore } from "./store";
 
 export function toProfilePreferences(a: OnboardingAnswers): ProfilePreferences {
   return {
-    display_name: a.firstName,
+    display_name: a.fullName,
     usual_bedtime: toApiTime(a.bedtimeMinutes),
     usual_wake_time: toApiTime(a.wakeMinutes),
     sleep_goal_minutes: sleepWindowMinutes(a.bedtimeMinutes, a.wakeMinutes),
@@ -47,8 +48,9 @@ export function useSyncOnboardingProfile() {
     void (async () => {
       try {
         const preferences = toProfilePreferences(useOnboardingStore.getState());
-        await saveProfile(preferences);
-        if (hasRequiredAnswers(preferences)) await completePreferences();
+        let profile = await saveProfile(preferences);
+        if (hasRequiredAnswers(preferences)) profile = await completePreferences();
+        useProfileStore.getState().setProfile(profile);
         useOnboardingStore.getState().reset();
       } catch (cause) {
         console.warn("Onboarding profile not saved yet; will retry.", cause);

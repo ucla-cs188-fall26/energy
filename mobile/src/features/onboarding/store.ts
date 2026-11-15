@@ -24,7 +24,7 @@ export type OnboardingAnswers = {
   ageYears: number | null;
   weightKg: number | null;
   heightCm: number | null;
-  firstName: string | null;
+  fullName: string | null;
   /** Set at account creation; the answers are only saved to this account's profile. */
   signupEmail: string | null;
   /** True from account creation until the answers are saved to the profile. */
@@ -47,7 +47,7 @@ export const initialAnswers: OnboardingAnswers = {
   ageYears: null,
   weightKg: null,
   heightCm: null,
-  firstName: null,
+  fullName: null,
   signupEmail: null,
   pendingSync: false,
 };
@@ -64,12 +64,15 @@ export const useOnboardingStore = create<OnboardingState>()(
     }),
     {
       name: "onboarding-answers",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: ({ set: _set, reset: _reset, ...answers }) => answers,
-      // v0 only stored caffeineFrequency; v1 also allowed sex "undisclosed", which was removed.
+      // v0 only stored caffeineFrequency; v1 also allowed sex "undisclosed", which was
+      // removed; v2 stored the name as firstName.
       migrate: (persisted) => {
-        const answers = { ...initialAnswers, ...(persisted as Partial<OnboardingAnswers>) };
+        const { firstName, ...rest } = persisted as Partial<OnboardingAnswers> & { firstName?: string | null };
+        const answers = { ...initialAnswers, ...rest };
+        if (answers.fullName == null && firstName) answers.fullName = firstName;
         if (answers.sex !== "female" && answers.sex !== "male") answers.sex = null;
         return answers;
       },

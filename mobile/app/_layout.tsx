@@ -39,6 +39,11 @@ function Navigation() {
         <Stack.Protected guard={!!session && !recovery} redirectTo="/(auth)/welcome">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="log-drink" options={{ presentation: "modal" }} />
+          <Stack.Screen name="log-nap" options={{ presentation: "modal" }} />
+          <Stack.Screen name="account" />
+          <Stack.Screen name="edit-profile" />
+          <Stack.Screen name="sleep-schedule" />
+          <Stack.Screen name="sleeping" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="(auth)/welcome" />

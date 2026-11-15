@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, radius, spacing } from "@/utils/theme";
+import { colors } from "@/utils/theme";
 
 type Props = {
   icon: ComponentProps<typeof Ionicons>["name"];
@@ -17,7 +17,9 @@ export function QuickAction({ icon, label, onPress }: Props) {
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       accessibilityRole="button"
     >
-      <Ionicons name={icon} size={24} color={colors.primary} />
+      <View style={styles.iconTile}>
+        <Ionicons name={icon} size={24} color={colors.primary} />
+      </View>
       <Text style={styles.label}>{label}</Text>
     </Pressable>
   );
@@ -27,13 +29,19 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     alignItems: "center",
-    gap: spacing.xs,
+    gap: 12,
     backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    borderRadius: 22,
+    paddingVertical: 18,
   },
-  pressed: { backgroundColor: colors.primarySoft },
-  label: { fontSize: 13, fontWeight: "600", color: colors.text, textAlign: "center" },
+  pressed: { opacity: 0.7 },
+  iconTile: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  label: { fontSize: 16, fontWeight: "700", color: colors.text, textAlign: "center" },
 });

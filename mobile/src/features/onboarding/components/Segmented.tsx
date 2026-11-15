@@ -7,10 +7,13 @@ type Props<T extends string> = {
   value: T;
   onChange: (value: T) => void;
   accessibilityLabel: string;
+  /** "solid": purple selected pill. "light": white selected pill with dark text. */
+  variant?: "solid" | "light";
 };
 
 /** Pill-shaped segmented control, e.g. Low / Medium / High. */
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel }: Props<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, variant = "solid" }: Props<T>) {
+  const light = variant === "light";
   return (
     <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel}>
       {options.map((o) => {
@@ -21,9 +24,9 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(o.value)}
-            style={[styles.segment, selected && styles.selected]}
+            style={[styles.segment, selected && (light ? styles.selectedLight : styles.selected)]}
           >
-            <Text style={[styles.label, selected && styles.labelSelected]}>{o.label}</Text>
+            <Text style={[styles.label, light && styles.labelLight, selected && (light ? styles.labelSelectedLight : styles.labelSelected)]}>{o.label}</Text>
           </Pressable>
         );
       })}
@@ -37,4 +40,13 @@ const styles = StyleSheet.create({
   selected: { backgroundColor: colors.primary },
   label: { fontSize: 17, fontWeight: "700", color: colors.primary },
   labelSelected: { color: colors.surface },
+  selectedLight: {
+    backgroundColor: colors.surface,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  labelLight: { color: colors.textMuted },
+  labelSelectedLight: { color: colors.text },
 });

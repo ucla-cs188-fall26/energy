@@ -69,3 +69,27 @@ test('removed drink categories are gone from the catalog', () => {
   assert.ok(!ids.includes('preworkout') && !ids.includes('pill'));
   assert.ok(ids.includes('other'));
 });
+
+test('Now and Bed chart labels never overlap or leave the chart', () => {
+  const { placeMarkerLabels } = require('../src/components/charts.ts');
+  const extent = (l, w) => (l.anchor === 'start' ? [l.x, l.x + w] : [l.x - w, l.x]);
+  // Far apart: default sides.
+  let p = placeMarkerLabels(470, 100, 400);
+  assert.deepEqual([p.now.anchor, p.bed.anchor], ['start', 'end']);
+  // The screenshot case: 475px chart, Now at 367px, Bed at 448px (near the right edge).
+  // Bed can't move right, so Now moves left of its line.
+  p = placeMarkerLabels(475, 367, 448);
+  assert.deepEqual([p.now.anchor, p.bed.anchor], ['end', 'end']);
+  for (let nowX = 1; nowX < 470; nowX += 7) {
+    for (const bedX of [20, 120, 300, 440, 469]) {
+      const q = placeMarkerLabels(470, nowX, bedX);
+      const [a0, a1] = extent(q.now, 36);
+      assert.ok(a0 >= 0 && a1 <= 470, `Now off chart at ${nowX}`);
+      if (q.bed) {
+        const [b0, b1] = extent(q.bed, 32);
+        assert.ok(b0 >= 0 && b1 <= 470, `Bed off chart at ${bedX}`);
+        assert.ok(a1 + 4 <= b0 || b1 + 4 <= a0, `overlap at now=${nowX} bed=${bedX}`);
+      }
+    }
+  }
+});

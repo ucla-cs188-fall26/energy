@@ -2,7 +2,7 @@ import { View } from "react-native";
 import Svg, { Line, Path, Text as SvgText } from "react-native-svg";
 
 import { AxisLabels } from "@/components/AxisLabels";
-import { makeScale, smoothPath, useWidth } from "@/components/charts";
+import { linePath, makeScale, placeMarkerLabels, useWidth } from "@/components/charts";
 import { formatHour } from "@/features/schedule";
 import { colors } from "@/utils/theme";
 
@@ -20,10 +20,11 @@ export function CaffeineChart({ points, now, bedtime }: Props) {
   const peak = Math.max(50, ...points.map((p) => p.mg));
   const scale = makeScale(width, HEIGHT, { t0, t1, v0: 0, v1: peak * 1.05 }, { top: TOP, bottom: 0 });
   const xy = points.map((p) => ({ x: scale.x(p.t), y: scale.y(p.mg) }));
-  const line = smoothPath(xy);
+  const line = linePath(xy);
   const area = `${line} L${width},${HEIGHT} L0,${HEIGHT} Z`;
   const nowX = Math.min(width - 1, Math.max(1, scale.x(now)));
   const bedX = scale.x(bedtime);
+  const labels = placeMarkerLabels(width, nowX, bedX);
 
   // Start of day, every 6 hours after, and the end.
   const ticks = [{ x: 0, label: formatHour(t0) }];
@@ -40,9 +41,12 @@ export function CaffeineChart({ points, now, bedtime }: Props) {
             <Path d={area} fill={FILL} />
             <Path d={line} stroke={colors.primary} strokeWidth={3} fill="none" />
             <Line x1={bedX} x2={bedX} y1={TOP} y2={HEIGHT} stroke={colors.textMuted} strokeWidth={1.5} strokeDasharray="5 5" />
-            <SvgText x={bedX - 6} y={TOP - 8} fontSize={14} fill={colors.textMuted} textAnchor="end">Bed</SvgText>
+            {labels.bed ? (
+              <SvgText x={labels.bed.x} y={TOP - 8} fontSize={14} fill={colors.textMuted} textAnchor={labels.bed.anchor}>Bed</SvgText>
+            ) : null}
             <Line x1={nowX} x2={nowX} y1={TOP - 20} y2={HEIGHT} stroke={colors.text} strokeWidth={2} />
-            <SvgText x={nowX + 6} y={TOP - 8} fontSize={14} fontWeight="700" fill={colors.text}>Now</SvgText>
+            <SvgText x={labels.now!.x} y={TOP - 8} fontSize={14} fontWeight="700" fill={colors.text}
+              textAnchor={labels.now!.anchor}>Now</SvgText>
           </Svg>
           <AxisLabels width={width} ticks={ticks} />
         </>

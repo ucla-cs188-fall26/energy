@@ -6,13 +6,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DRINK_CATEGORIES, DrinkCategory } from "@/features/caffeine/catalog";
 import { DrinkDetailSheet } from "@/features/caffeine/DrinkDetailSheet";
-import { colors, radius, spacing } from "@/utils/theme";
+import { colors } from "@/utils/theme";
+
+const COLUMNS = 3;
 
 export default function LogDrinkScreen() {
   const [category, setCategory] = useState<DrinkCategory | null>(null);
   // After logging, wait for the detail sheet to finish closing before closing this screen,
   // so iOS doesn't try to dismiss two sheets at once.
   const closeAfterSheet = useRef(false);
+  // Rows of three; each row stretches so the grid fills the screen.
+  const rows = Array.from({ length: Math.ceil(DRINK_CATEGORIES.length / COLUMNS) },
+    (_, i) => DRINK_CATEGORIES.slice(i * COLUMNS, (i + 1) * COLUMNS));
 
   const handleLogged = () => {
     closeAfterSheet.current = true;
@@ -23,8 +28,8 @@ export default function LogDrinkScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Log a Drink</Text>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Close">
+        <Text style={styles.title} accessibilityRole="header">Log a drink</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
           <Ionicons name="close" size={26} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -32,18 +37,26 @@ export default function LogDrinkScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Text style={styles.sectionTitle}>What did you drink?</Text>
         <View style={styles.grid}>
-          {DRINK_CATEGORIES.map((c) => (
-            <Pressable
-              key={c.id}
-              onPress={() => setCategory(c)}
-              style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
-              accessibilityRole="button"
-            >
-              <Ionicons name={c.icon} size={26} color={colors.primary} />
-              <Text style={styles.tileLabel} numberOfLines={2}>
-                {c.name}
-              </Text>
-            </Pressable>
+          {rows.map((row, i) => (
+            <View key={i} style={styles.row}>
+              {row.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => setCategory(c)}
+                  style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.iconTile}>
+                    <Ionicons name={c.icon} size={30} color={colors.primary} />
+                  </View>
+                  <Text style={styles.tileLabel} numberOfLines={2}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+              ))}
+              {/* Keep tiles in a short last row the same width as the others. */}
+              {Array.from({ length: COLUMNS - row.length }, (_, j) => <View key={`pad-${j}`} style={styles.pad} />)}
+            </View>
           ))}
         </View>
       </ScrollView>
@@ -66,27 +79,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
-  title: { fontSize: 20, fontWeight: "700", color: colors.text },
+  title: { fontSize: 24, fontWeight: "800", color: colors.text },
   scroll: { flex: 1 },
-  content: { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing.xl },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: colors.text },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, gap: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: "700", color: colors.text },
+  grid: { flex: 1, gap: 12 },
+  row: { flex: 1, flexDirection: "row", gap: 12 },
   tile: {
-    width: "31.5%",
-    aspectRatio: 1,
+    flex: 1,
+    minHeight: 120,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
+    gap: 12,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: 22,
+    padding: 10,
   },
   tilePressed: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
-  tileLabel: { fontSize: 13, fontWeight: "600", color: colors.text, textAlign: "center" },
+  iconTile: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileLabel: { fontSize: 16, fontWeight: "700", color: colors.text, textAlign: "center" },
+  pad: { flex: 1 },
 });

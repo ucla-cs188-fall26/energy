@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from energy_api.core.auth import AuthenticatedUser, bearer, get_auth_client, get_current_user
+from energy_api.core.clock import not_future
 from energy_api.core.config import Settings, get_settings
 from energy_api.schemas.sleep import SleepHistory, SleepRecord, SleepSession, SleepStart, SleepStop
 
@@ -86,7 +87,7 @@ class SleepService:
         return present_session(row, self.now)
 
     async def start(self, payload: SleepStart) -> SleepSession:
-        started = payload.started_at.astimezone(timezone.utc) if payload.started_at else self.now
+        started = not_future(payload.started_at.astimezone(timezone.utc), self.now) if payload.started_at else self.now
         if started > self.now:
             raise HTTPException(422, "Sleep cannot start in the future")
         rows = await self._request("POST", body={"user_id": str(self.user_id), "started_at": started.isoformat()})
@@ -105,7 +106,7 @@ class SleepService:
         existing = await self.get(session_id)
         if existing.ended_at is not None:
             raise HTTPException(409, "Sleep session is already stopped")
-        ended = payload.ended_at.astimezone(timezone.utc) if payload.ended_at else self.now
+        ended = not_future(payload.ended_at.astimezone(timezone.utc), self.now) if payload.ended_at else self.now
         if ended > self.now or ended <= existing.started_at.astimezone(timezone.utc):
             raise HTTPException(422, "Sleep must end after its start and cannot end in the future")
         body: dict[str, str | int] = {"ended_at": ended.isoformat()}

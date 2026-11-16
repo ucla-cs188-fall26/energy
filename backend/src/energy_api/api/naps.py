@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
 
-from energy_api.schemas.naps import NapHistory, NapRating, NapSession, NapStart, NapStop
+from energy_api.schemas.naps import NapHistory, NapLog, NapRating, NapSession, NapStart, NapStop
 from energy_api.services.naps.sessions import NapService, get_nap_service
 
 router = APIRouter(prefix="/naps/sessions", tags=["nap"])
@@ -13,6 +13,11 @@ Service = Annotated[NapService, Depends(get_nap_service)]
 @router.post("/start", response_model=NapSession, status_code=201)
 async def start(service: Service, payload: NapStart = Body(default_factory=NapStart)) -> NapSession:
     return await service.start(payload)
+
+
+@router.post("/log", response_model=NapSession, status_code=201)
+async def log(payload: NapLog, service: Service) -> NapSession:
+    return await service.log(payload)
 
 
 @router.get("/active", response_model=NapSession | None)

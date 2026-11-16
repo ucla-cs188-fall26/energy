@@ -29,6 +29,18 @@ class NapStop(NapInput):
     refreshed_rating: Quality | None = None
 
 
+class NapLog(NapInput):
+    started_at: AwareDatetime
+    ended_at: AwareDatetime
+    refreshed_rating: Quality | None = None
+
+    @model_validator(mode="after")
+    def valid_interval(self):
+        if self.ended_at <= self.started_at:
+            raise ValueError("Nap must end after it starts")
+        return self
+
+
 class NapRating(NapInput):
     refreshed_rating: Quality
 

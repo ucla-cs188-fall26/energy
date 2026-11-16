@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from energy_api.core.auth import AuthenticatedUser, bearer, get_auth_client, get_current_user
+from energy_api.core.clock import not_future
 from energy_api.core.config import Settings, get_settings
 from energy_api.schemas.energy import EnergyCheckin, EnergyCreate, EnergyHistory
 
@@ -64,7 +65,7 @@ class EnergyService:
         return rows[0]
 
     async def create(self, payload: EnergyCreate) -> EnergyCheckin:
-        recorded = payload.recorded_at.astimezone(timezone.utc) if payload.recorded_at else self.now
+        recorded = not_future(payload.recorded_at.astimezone(timezone.utc), self.now) if payload.recorded_at else self.now
         if recorded > self.now:
             raise HTTPException(422, 'Energy check-ins cannot be recorded in the future')
         return self._one(await self._request('POST', body={

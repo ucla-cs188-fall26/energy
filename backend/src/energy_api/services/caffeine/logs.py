@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from energy_api.core.auth import AuthenticatedUser, bearer, get_auth_client, get_current_user
+from energy_api.core.clock import not_future
 from energy_api.core.config import Settings, get_settings
 from energy_api.schemas.caffeine import CaffeineCreate, CaffeineDailyTotal, CaffeineHistory, CaffeineLog, CaffeinePreset, CaffeineUpdate
 
@@ -80,7 +81,7 @@ class CaffeineService:
         return rows[0]
 
     def _consumed(self, value: datetime | None) -> str:
-        value = value.astimezone(timezone.utc) if value else self.now
+        value = not_future(value.astimezone(timezone.utc), self.now) if value else self.now
         if value > self.now:
             raise HTTPException(422, 'Consumption timestamp cannot be in the future')
         return value.isoformat()

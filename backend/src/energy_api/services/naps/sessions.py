@@ -8,8 +8,9 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from energy_api.core.auth import AuthenticatedUser, bearer, get_auth_client, get_current_user
+from energy_api.core.clock import not_future
 from energy_api.core.config import Settings, get_settings
-from energy_api.schemas.naps import NapHistory, NapRecord, NapSession, NapStart, NapStop
+from energy_api.schemas.naps import NapHistory, NapLog, NapRecord, NapSession, NapStart, NapStop
 
 COLUMNS = ",".join(NapRecord.model_fields)
 
@@ -83,10 +84,22 @@ class NapService:
         return present_session(row, self.now)
 
     async def start(self, payload: NapStart) -> NapSession:
-        started = payload.started_at.astimezone(timezone.utc) if payload.started_at else self.now
+        started = not_future(payload.started_at.astimezone(timezone.utc), self.now) if payload.started_at else self.now
         if started > self.now:
             raise HTTPException(422, "Nap cannot start in the future")
         rows = await self._request("POST", body={"user_id": str(self.user_id), "started_at": started.isoformat()})
+        return present_session(self._one(rows), self.now)
+
+    async def log(self, payload: NapLog) -> NapSession:
+        ended = not_future(payload.ended_at.astimezone(timezone.utc), self.now)
+        if ended > self.now:
+            raise HTTPException(422, "Nap cannot end in the future")
+        if ended <= payload.started_at.astimezone(timezone.utc):
+            raise HTTPException(422, "Nap must end after it starts")
+        body = payload.model_dump(mode="json", exclude_none=True)
+        body["ended_at"] = ended.isoformat()
+        body["user_id"] = str(self.user_id)
+        rows = await self._request("POST", body=body)
         return present_session(self._one(rows), self.now)
 
     async def active(self) -> NapSession | None:
@@ -102,7 +115,7 @@ class NapService:
         existing = await self.get(session_id)
         if existing.ended_at is not None:
             raise HTTPException(409, "Nap session is already stopped")
-        ended = payload.ended_at.astimezone(timezone.utc) if payload.ended_at else self.now
+        ended = not_future(payload.ended_at.astimezone(timezone.utc), self.now) if payload.ended_at else self.now
         if ended > self.now or ended <= existing.started_at.astimezone(timezone.utc):
             raise HTTPException(422, "Nap must end after its start and cannot end in the future")
         body: dict[str, str | int] = {"ended_at": ended.isoformat()}

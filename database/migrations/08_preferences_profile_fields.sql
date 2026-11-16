@@ -1,8 +1,8 @@
--- Align user_profiles with the onboarding screens (EnergySync onboarding design):
+-- Align user_profiles with the preference screens (EnergySync preference design):
 --   * caffeine frequency has four options instead of three
 --   * side effects match the six choices shown in Step 2
 --   * Step 4 collects sex, age, weight, height and preferred units
---   * every onboarding step can be skipped, and no screen asks for an initial
+--   * every preference step can be skipped, and no screen asks for an initial
 --     energy rating, so completion no longer requires one
 begin;
 

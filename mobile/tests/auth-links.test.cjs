@@ -5,6 +5,7 @@ const Module = require('node:module');
 const ts = require('typescript');
 const calls = [];
 let reply;
+let resetError = null;
 let pending;
 const listeners = new Set();
 const auth = {
@@ -19,7 +20,7 @@ const auth = {
     return result;
   },
   signUp: async (input) => { calls.push(input); return { data: {}, error: null }; },
-  resetPasswordForEmail: async (...args) => { calls.push(args); return { error: null }; },
+  resetPasswordForEmail: async (...args) => { calls.push(args); return { error: resetError }; },
   resend: async (input) => { calls.push(input); return { error: null }; },
   updateUser: async (input) => { calls.push(input); return { error: null }; },
 };
@@ -120,4 +121,12 @@ for (const url of [
 
 test('unrelated app links are ignored by callback detection', () => {
   assert.equal(isAuthCallback('energyapp://sleep'), false);
+});
+
+test('reset rate-limit feedback is useful and never exposes SDK error contents', async () => {
+  resetError = { status: 429, message: 'sensitive synthetic details' };
+  await assert.rejects(requestPasswordReset('demo@example.invalid'), error => /rate limited/i.test(error.message) && !error.message.includes('sensitive'));
+  resetError = { status: 500, message: 'sensitive synthetic details' };
+  await assert.rejects(requestPasswordReset('demo@example.invalid'), /Unable to send/);
+  resetError = null;
 });

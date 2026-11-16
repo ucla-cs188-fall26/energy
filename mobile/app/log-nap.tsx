@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/Chip";
@@ -32,7 +32,9 @@ const LENGTHS = [
 const MINUTE = 60_000;
 
 export default function LogNapScreen() {
-  const logNap = useSleepStore((s) => s.logNap);
+  const { logNap, startNap, stopNap, activeNap } = useSleepStore();
+  const [saving, setSaving] = useState(false);
+  const [rating, setRating] = useState<number | undefined>();
   const [minutesAgo, setMinutesAgo] = useState(0);
   const [length, setLength] = useState(20);
   // Fixed when the sheet opens so the summary doesn't drift while choosing.
@@ -41,10 +43,14 @@ export default function LogNapScreen() {
   const end = openedAt - minutesAgo * MINUTE;
   const start = end - length * MINUTE;
 
-  const save = () => {
-    logNap({ startedAt: new Date(start).toISOString(), endedAt: new Date(end).toISOString() });
-    router.back();
-  };
+  async function action(work: () => Promise<void>, close = true) {
+    if (saving) return;
+    setSaving(true);
+    try { await work(); if (close) router.back(); }
+    catch (e) { Alert.alert("Unable to save nap", e instanceof Error ? e.message : "Please try again."); }
+    finally { setSaving(false); }
+  }
+  const save = () => action(() => logNap({ startedAt: new Date(start).toISOString(), endedAt: new Date(end).toISOString(), quality: rating }));
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -56,6 +62,11 @@ export default function LogNapScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <PrimaryButton title={activeNap ? "Stop active nap" : "Start nap now"}
+          disabled={saving} onPress={() => action(() => activeNap ? stopNap(rating) : startNap(), !!activeNap)} />
+        <Text style={styles.section}>How refreshed do you feel? (optional)</Text>
+        <View style={styles.chips}>{[1,2,3,4,5].map(r => <Chip key={r} label={String(r)} selected={rating === r} onPress={() => setRating(r)} />)}</View>
+        <Text style={styles.section}>Or log an earlier nap</Text>
         <Text style={styles.section}>When did you wake up?</Text>
         <View style={styles.chips}>
           {WOKE_UP.map((o) => (
@@ -79,7 +90,7 @@ export default function LogNapScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <PrimaryButton title="Save nap" onPress={save} />
+        <PrimaryButton title={saving ? "Saving…" : "Save nap"} disabled={saving || !!activeNap} onPress={save} />
       </View>
     </SafeAreaView>
   );

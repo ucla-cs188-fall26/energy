@@ -13,27 +13,30 @@ import { formatClock, formatDuration as formatSleepWindow, sleepWindowMinutes } 
 import { useProfileSettings } from "@/features/profile/store";
 import { formatDuration, formatTime, nextOccurrence } from "@/features/schedule";
 import {
-  estimateCycles, Nap, PLACEHOLDER_QUALITY, PLACEHOLDER_STAGES, SleepSession, sessionMinutes, useLastSleep, useSleepStore,
+  estimateCycles, SleepSession, sessionMinutes, useLastSleep, useSleepStore,
 } from "@/features/sleep/store";
 import { useNow } from "@/hooks/useNow";
 import { colors } from "@/utils/theme";
 
+import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
+import { SyncStatus } from "@/components/SyncStatus";
+import { Chip } from "@/components/Chip";
 const SUCCESS = "#15803D";
 const SUCCESS_SOFT = "#E7F6EC";
 const WARN = "#B45309";
 const WARN_SOFT = "#FDF1E3";
-const STAGE_COLORS = { light: "#B9A8F5", deep: "#4C2DB8", rem: "#5BB8E4" } as const;
-const STAGE_LABELS = { light: "Light", deep: "Deep", rem: "REM" } as const;
 const MINUTE = 60_000;
 
 type Tab = "tonight" | "history";
 
 export default function SleepScreen() {
+  useTrackingRefresh();
   const [tab, setTab] = useState<Tab>("tonight");
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title} accessibilityRole="header">Sleep</Text>
+        <SyncStatus />
         <Segmented<Tab>
           accessibilityLabel="Sleep view"
           options={[{ value: "tonight", label: "Tonight" }, { value: "history", label: "History" }]}
@@ -82,12 +85,12 @@ function Tonight() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Sleep schedule: bedtime ${formatClock(bedtimeMinutes)}, alarm ${formatClock(wakeMinutes)}. Edit`}
+          accessibilityLabel={`Sleep schedule: bedtime ${formatClock(bedtimeMinutes)}, wake time ${formatClock(wakeMinutes)}. Edit`}
           onPress={() => router.push("/sleep-schedule")}
           style={({ pressed }) => [styles.scheduleRow, pressed && styles.pressed]}
         >
           <ScheduleCell label="Bedtime" value={formatClock(bedtimeMinutes)} />
-          <ScheduleCell label="Alarm" value={formatClock(wakeMinutes)} divider />
+          <ScheduleCell label="Wake time" value={formatClock(wakeMinutes)} divider />
           <ScheduleCell label="Window" value={formatSleepWindow(sleepWindowMinutes(bedtimeMinutes, wakeMinutes))} divider />
           <Ionicons name="create-outline" size={18} color={colors.primary} style={styles.editIcon} />
         </Pressable>
@@ -101,7 +104,7 @@ function Tonight() {
 
         <PrimaryButton
           title={active ? "Open sleep screen" : "Start sleep"}
-          onPress={() => { startSleep(); router.push("/sleeping"); }}
+          onPress={async () => { try { await startSleep(); router.push("/sleeping"); } catch (e) { Alert.alert("Unable to start sleep", e instanceof Error ? e.message : "Please try again."); } }}
         />
       </Card>
 
@@ -109,7 +112,7 @@ function Tonight() {
 
       {lastSleep ? <LastNight session={lastSleep} /> : (
         <Card>
-          <Text style={styles.cardTitle}>Last night</Text>
+          <Text style={styles.cardTitle}>Last sleep</Text>
           <Text style={[styles.muted, styles.emptyText]}>
             No sleep logged yet. Tap Start sleep when you go to bed.
           </Text>
@@ -121,17 +124,11 @@ function Tonight() {
 
 function NapsToday({ now }: { now: number }) {
   const naps = useSleepStore((s) => s.naps);
-  const removeNap = useSleepStore((s) => s.removeNap);
+
   const startOfDay = new Date(now).setHours(0, 0, 0, 0);
   const today = naps
     .filter((n) => Date.parse(n.endedAt) >= startOfDay)
     .sort((a, b) => b.endedAt.localeCompare(a.endedAt));
-
-  const confirmDelete = (nap: Nap) =>
-    Alert.alert("Delete nap?", `${formatTime(Date.parse(nap.startedAt))} – ${formatTime(Date.parse(nap.endedAt))}`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => removeNap(nap.id) },
-    ]);
 
   return (
     <Card>
@@ -151,11 +148,10 @@ function NapsToday({ now }: { now: number }) {
         <View key={n.id} style={[styles.historyRow, i > 0 && styles.historyDivider]}>
           <Text style={[styles.muted, styles.flex]}>
             {formatTime(Date.parse(n.startedAt))} – {formatTime(Date.parse(n.endedAt))}
+            {n.quality ? ` · Refreshed ${n.quality}/5` : ""}
           </Text>
           <Text style={styles.napValue}>{formatDuration(sessionMinutes(n))}</Text>
-          <Pressable onPress={() => confirmDelete(n)} hitSlop={10} accessibilityLabel="Delete nap">
-            <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
-          </Pressable>
+
         </View>
       )) : <Text style={[styles.muted, styles.emptyText]}>No naps logged today.</Text>}
     </Card>
@@ -173,10 +169,12 @@ function ScheduleCell({ label, value, divider }: { label: string; value: string;
 
 function LastNight({ session }: { session: SleepSession }) {
   const minutes = sessionMinutes(session);
+  const rate = useSleepStore(s => s.rateSleep);
+  const [saving, setSaving] = useState(false);
   return (
     <Card>
       <View style={styles.lastHeader}>
-        <Text style={styles.cardTitle}>Last night</Text>
+        <Text style={styles.cardTitle}>Last sleep</Text>
         <Text style={styles.muted}>
           {formatTime(Date.parse(session.startedAt))} – {formatTime(Date.parse(session.endedAt))}
         </Text>
@@ -184,21 +182,14 @@ function LastNight({ session }: { session: SleepSession }) {
       <View style={styles.statsRow}>
         <Stat value={formatDuration(minutes)} label="Asleep" />
         <Stat value={String(estimateCycles(minutes))} label="Cycles" />
-        {/* PLACEHOLDER: quality and stages aren't measured yet. */}
-        <Stat value={`${PLACEHOLDER_QUALITY}/5`} label="Quality" />
+        <Stat value={session.quality ? `${session.quality}/5` : "—"} label="Quality" />
       </View>
-      <View style={styles.stageBar}>
-        {[...PLACEHOLDER_STAGES, ...PLACEHOLDER_STAGES].map((s, i) => (
-          <View key={i} style={{ flex: s.share, backgroundColor: STAGE_COLORS[s.stage] }} />
-        ))}
-      </View>
-      <View style={styles.legend}>
-        {PLACEHOLDER_STAGES.map((s) => (
-          <View key={s.stage} style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: STAGE_COLORS[s.stage] }]} />
-            <Text style={styles.legendText}>{STAGE_LABELS[s.stage]} {Math.round(s.share * 100)}%</Text>
-          </View>
-        ))}
+      <Text style={[styles.muted, { marginTop: 16 }]}>Rate your sleep · Cycles are estimated, sleep stages are not measured.</Text>
+      <View style={[styles.legend, { flexWrap: "wrap" }]}>
+        {[1,2,3,4,5].map(r => <Chip key={r} label={String(r)} selected={session.quality === r}
+          onPress={async () => { if (saving) return; setSaving(true);
+            try { await rate(session.id, r); } catch (e) { Alert.alert("Unable to save rating", e instanceof Error ? e.message : "Try again."); }
+            finally { setSaving(false); } }} />)}
       </View>
     </Card>
   );
@@ -238,6 +229,7 @@ function History() {
             </Text>
             <Text style={styles.muted}>
               {formatTime(Date.parse(s.startedAt))} – {formatTime(Date.parse(s.endedAt))}
+              {s.quality ? ` · ${s.nap ? "Refreshed" : "Quality"} ${s.quality}/5` : ""}
             </Text>
           </View>
           <Text style={styles.historyValue}>{formatDuration(sessionMinutes(s))}</Text>

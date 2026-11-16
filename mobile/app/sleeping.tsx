@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 
@@ -17,18 +18,6 @@ const MUTED = "#A9A3CC";
 const BAR = "#8B76F0";
 const BAR_TRACK = "#3A355E";
 const MINUTE = 60_000;
-const SMART_WAKE_MINUTES = 30;
-
-/**
- * Rough stage within a ~90-minute cycle. PLACEHOLDER: an estimate from elapsed
- * time only; nothing measures sleep stages yet.
- */
-function estimatedStage(fraction: number) {
-  if (fraction < 0.5) return "Est. light";
-  if (fraction < 0.75) return "Est. deep";
-  return "Est. REM";
-}
-
 function MoonArt() {
   return (
     <Svg width={140} height={140} viewBox="0 0 100 100">
@@ -42,6 +31,7 @@ function MoonArt() {
 
 export default function SleepingScreen() {
   const now = useNow(1000);
+  const [saving, setSaving] = useState(false);
   const active = useSleepStore((s) => s.active);
   const stopSleep = useSleepStore((s) => s.stopSleep);
   const { bedtimeMinutes, wakeMinutes } = useProfileSettings();
@@ -54,8 +44,13 @@ export default function SleepingScreen() {
   const cycleIndex = Math.min(totalCycles - 1, Math.floor(elapsed / CYCLE_MINUTES));
   const cycleFraction = elapsed >= totalCycles * CYCLE_MINUTES ? 1 : (elapsed % CYCLE_MINUTES) / CYCLE_MINUTES;
 
-  const stop = () => {
-    stopSleep();
+  const stop = async () => {
+    if (saving) return;
+    setSaving(true);
+    try { await stopSleep(); } catch (e) {
+      Alert.alert("Unable to stop sleep", e instanceof Error ? e.message : "Try again.");
+      setSaving(false); return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace("/(tabs)/sleep");
   };
@@ -71,13 +66,13 @@ export default function SleepingScreen() {
           {formatDuration(elapsed)}
         </Text>
         <Text style={styles.alarm}>
-          Alarm {formatTime(alarm)} · {left > 0 ? `${formatDuration(left)} left` : "now"}
+          Planned wake {formatTime(alarm)} · {left > 0 ? `${formatDuration(left)} left` : "now"}
         </Text>
 
         <View style={styles.panel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Sleep cycle {cycleIndex + 1} of {totalCycles}</Text>
-            <Text style={styles.panelMuted}>{estimatedStage(cycleFraction)}</Text>
+            <Text style={styles.panelMuted}>90-min estimate</Text>
           </View>
           <View style={styles.cycles}>
             {Array.from({ length: totalCycles }, (_, i) => {
@@ -90,7 +85,7 @@ export default function SleepingScreen() {
             })}
           </View>
           <Text style={styles.panelMuted}>
-            Smart wake: between {formatTime(alarm - SMART_WAKE_MINUTES * MINUTE)} and {formatTime(alarm)}, in light sleep
+            Progress is estimated from elapsed time; sleep stages are not measured.
           </Text>
         </View>
       </View>
@@ -98,12 +93,13 @@ export default function SleepingScreen() {
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
+          disabled={saving}
           onPress={stop}
           style={({ pressed }) => [styles.stop, pressed && styles.stopPressed]}
         >
-          <Text style={styles.stopText}>Stop sleep</Text>
+          <Text style={styles.stopText}>{saving ? "Saving…" : "Stop sleep"}</Text>
         </Pressable>
-        <Text style={styles.hint}>Keep your phone face down on the bed</Text>
+        <Text style={styles.hint}>Your session is saved to your account</Text>
       </View>
     </SafeAreaView>
   );

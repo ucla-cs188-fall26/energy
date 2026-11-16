@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { AxisLabels } from "@/components/AxisLabels";
@@ -12,9 +12,10 @@ const DIP_FILL = "#FDF1E3";
 const HOUR = 3_600_000;
 
 /** `startLabel` names the left edge: "Now" for today, the wake time for tomorrow. */
-export function ForecastChart({ forecast, startLabel = "Now" }: { forecast: Forecast; startLabel?: string }) {
+export function ForecastChart({ forecast, startLabel = "Now", emptyMessage }: { forecast: Forecast; startLabel?: string; emptyMessage?: string }) {
   const [width, onLayout] = useWidth();
   const { points, dip } = forecast;
+  if (points.length < 2) return <Text style={{ color: colors.textMuted, paddingVertical: 20 }}>{points.length === 1 ? "No more hourly forecast points today." : emptyMessage ?? "Forecast unavailable. Record sleep and check your connection."}</Text>;
   const t0 = points[0].t;
   const t1 = points[points.length - 1].t;
   const values = points.map((p) => p.value);

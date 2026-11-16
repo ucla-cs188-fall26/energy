@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "@/components/Card";
 import { CaffeineChart } from "@/features/caffeine/CaffeineChart";
-import { DRINK_CATEGORIES } from "@/features/caffeine/catalog";
+import { DRINK_CATEGORIES, PRESET_IDS, servingMl } from "@/features/caffeine/catalog";
 import { BEDTIME_OK_MG, DAILY_LIMIT_MG } from "@/features/caffeine/model";
 import { useCaffeineStore, useTodayEntries } from "@/features/caffeine/store";
 import { CaffeineEntry } from "@/features/caffeine/types";
@@ -14,6 +15,9 @@ import { formatHour, formatTime } from "@/features/schedule";
 import { useNow } from "@/hooks/useNow";
 import { colors } from "@/utils/theme";
 
+import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
+import { SyncStatus } from "@/components/SyncStatus";
+import { PrimaryButton } from "@/features/onboarding/components/PrimaryButton";
 const SUCCESS = "#15803D";
 const SUCCESS_SOFT = "#E7F6EC";
 const WARN = "#B45309";
@@ -34,18 +38,37 @@ const QUICK_ITEMS = QUICK_ADD.map(([categoryId, optionId, label, durationMinutes
 
 export default function CaffeineScreen() {
   const now = useNow();
+  useTrackingRefresh();
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<CaffeineEntry | null>(null);
+  const [editMg, setEditMg] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editMl, setEditMl] = useState("");
+  const [history, setHistory] = useState(false);
+  const { entries, presets, updateEntry } = useCaffeineStore();
+  const items = history ? [...entries].sort((a,b) => b.consumedAt.localeCompare(a.consumedAt)) : null;
+  async function perform(work: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    try { await work(); } catch (e) { Alert.alert("Unable to save drink", e instanceof Error ? e.message : "Try again."); }
+    finally { setBusy(false); }
+  }
   const summary = useCaffeineSummary(now);
-  const today = useTodayEntries();
+  const today = useTodayEntries(now);
   const addEntry = useCaffeineStore((s) => s.addEntry);
   const removeEntry = useCaffeineStore((s) => s.removeEntry);
 
+  const quickItems = QUICK_ITEMS.map(q => {
+    const preset = presets.find(p => p.id === PRESET_IDS[q.option.id]);
+    return { ...q, option: { ...q.option, mg: Number(preset?.caffeine_mg ?? q.option.mg) } };
+  });
   const overLimit = summary.todayMg > DAILY_LIMIT_MG;
   const bedtimeOk = summary.atBedtimeMg < BEDTIME_OK_MG;
 
   const confirmDelete = (e: CaffeineEntry) =>
     Alert.alert("Delete drink?", `${e.name} · ${e.mg} mg`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => removeEntry(e.id) },
+      { text: "Delete", style: "destructive", onPress: () => void perform(() => removeEntry(e.id)) },
     ]);
 
   return (
@@ -53,6 +76,16 @@ export default function CaffeineScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title} accessibilityRole="header">Caffeine</Text>
 
+        <SyncStatus />
+        {editing ? <Card style={styles.gap}>
+          <Text style={styles.cardTitle}>Edit drink</Text>
+          <TextInput accessibilityLabel="Drink name" value={editName} onChangeText={setEditName} style={{ color: colors.text, padding: 12 }} maxLength={150} />
+          <TextInput accessibilityLabel="Caffeine mg" value={editMg} onChangeText={setEditMg} keyboardType="decimal-pad" style={{ color: colors.text, padding: 12 }} />
+          <TextInput accessibilityLabel="Serving ml" value={editMl} onChangeText={setEditMl} keyboardType="decimal-pad" style={{ color: colors.text, padding: 12 }} />
+          <PrimaryButton title="Save changes" disabled={busy || !editName.trim() || !editMg.trim() || !Number.isFinite(Number(editMg)) || Number(editMg) < 0 || Number(editMg) > 1500 || !Number.isFinite(Number(editMl)) || Number(editMl) <= 0}
+            onPress={() => void perform(async () => { await updateEntry({ ...editing, name: editName.trim(), mg: Number(editMg), servingSizeMl: Number(editMl) }); setEditing(null); })} />
+          <Pressable onPress={() => setEditing(null)}><Text style={styles.link}>Cancel</Text></Pressable>
+        </Card> : null}
         <Card style={styles.gap}>
           <View style={styles.todayRow}>
             <View>
@@ -101,18 +134,18 @@ export default function CaffeineScreen() {
         </View>
 
         <View style={styles.grid}>
-          {QUICK_ITEMS.map((q) => (
+          {quickItems.map((q) => (
             <Pressable
               key={q.option.id}
               accessibilityRole="button"
               accessibilityLabel={`Log ${q.label}, ${q.option.mg} milligrams`}
-              onPress={() => addEntry({
-                name: `${q.option.label} (${q.option.size})`,
-                mg: q.option.mg,
-                consumedAt: new Date().toISOString(),
-                durationMinutes: q.durationMinutes,
-                categoryId: q.categoryId,
-                optionId: q.option.id,
+              disabled={busy}
+              onPress={() => void perform(async () => {
+                const preset = presets.find(p => p.id === PRESET_IDS[q.option.id]);
+                await addEntry({ name: preset?.beverage_name ?? `${q.option.label} (${q.option.size})`,
+                  mg: Number(preset?.caffeine_mg ?? q.option.mg),
+                  servingSizeMl: Number(preset?.serving_size_ml ?? servingMl(q.option)),
+                  presetId: preset?.id, consumedAt: new Date().toISOString(), durationMinutes: 0 });
               })}
               style={({ pressed }) => [styles.quick, pressed && styles.pressed]}
             >
@@ -131,23 +164,27 @@ export default function CaffeineScreen() {
           <Text style={styles.link}>More drinks</Text>
         </Pressable>
 
-        {today.length ? (
+        <Pressable onPress={() => setHistory(!history)}><Text style={styles.link}>{history ? "Show today" : "Show all history"}</Text></Pressable>
+        {(items ?? today).length ? (
           <Card style={styles.list}>
-            {today.map((e, i) => (
+            {(items ?? today).map((e, i) => (
               <View key={e.id} style={[styles.drinkRow, i > 0 && styles.divider]}>
                 <View style={styles.flex}>
                   <Text style={styles.drinkName}>{e.name}</Text>
-                  <Text style={styles.muted}>{formatTime(Date.parse(e.consumedAt))}</Text>
+                  <Text style={styles.muted}>{history ? new Date(e.consumedAt).toLocaleDateString() + " · " : ""}{formatTime(Date.parse(e.consumedAt))}</Text>
                 </View>
                 <Text style={styles.drinkMg}>{e.mg} mg</Text>
-                <Pressable onPress={() => confirmDelete(e)} hitSlop={10} accessibilityLabel={`Delete ${e.name}`}>
+                <Pressable disabled={busy} accessibilityLabel={`Edit ${e.name}`} onPress={() => { setEditing(e); setEditMg(String(e.mg)); setEditName(e.name); setEditMl(String(e.servingSizeMl ?? "")); }}>
+                  <Ionicons name="create-outline" size={20} color={colors.primary} />
+                </Pressable>
+                <Pressable onPress={() => confirmDelete(e)} hitSlop={10} disabled={busy} accessibilityLabel={`Delete ${e.name}`}>
                   <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
                 </Pressable>
               </View>
             ))}
           </Card>
         ) : (
-          <Card><Text style={styles.muted}>No drinks logged yet today.</Text></Card>
+          <Card><Text style={styles.muted}>{history ? "No drinks logged yet." : "No drinks logged yet today."}</Text></Card>
         )}
       </ScrollView>
     </SafeAreaView>

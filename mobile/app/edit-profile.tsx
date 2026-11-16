@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { useAuth } from "@/hooks/useAuth";
 import { EditScreen } from "@/components/EditScreen";
 import { BodyDetails, BodyDetailsFields, useBodyDetailsForm } from "@/features/onboarding/components/BodyDetailsForm";
 import { TextField } from "@/features/onboarding/components/TextField";
@@ -15,6 +16,7 @@ const asUnits = (v: string | null | undefined): Units => (v === "imperial" ? "im
 function useInitialDetails(): BodyDetails {
   const profile = useMyProfile();
   const onboarding = useOnboardingStore();
+  const { session } = useAuth();
   if (profile) {
     return {
       sex: asSex(profile.sex),
@@ -24,7 +26,7 @@ function useInitialDetails(): BodyDetails {
       heightCm: profile.height_cm,
     };
   }
-  if (onboarding.pendingSync) {
+  if (onboarding.pendingSync && session?.user.email?.toLowerCase() === onboarding.signupEmail?.toLowerCase()) {
     const { sex, units, ageYears, weightKg, heightCm } = onboarding;
     return { sex, units, ageYears, weightKg, heightCm };
   }
@@ -72,7 +74,7 @@ export default function EditProfileScreen() {
   return (
     <EditScreen
       title="Edit profile"
-      subtitle="Sex, age and body size help personalize your caffeine estimates."
+      subtitle="Your saved personal details and display name."
       canSave={changed && form.valid && !!trimmedName}
       saving={saving}
       error={error}

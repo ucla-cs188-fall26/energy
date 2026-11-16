@@ -6,7 +6,7 @@ import { colors } from "@/utils/theme";
 
 type Props = {
   /** Energy level from 0 to 100. */
-  percent: number;
+  percent: number | null;
   size?: number;
   strokeWidth?: number;
 };
@@ -15,16 +15,16 @@ const AMBER = "#D97706";
 const AMBER_TRACK = "#FDF1DC";
 
 export function EnergyRing({ percent, size = 168, strokeWidth = 18 }: Props) {
-  const clamped = Math.max(0, Math.min(100, percent));
+  const clamped = Math.max(0, Math.min(100, percent ?? 0));
   const r = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - clamped / 100);
-  const good = clamped >= 70;
+  const good = percent === null || clamped >= 70;
   const color = good ? colors.energyGood : AMBER;
   const track = good ? colors.energyTrack : AMBER_TRACK;
 
   return (
-    <View style={{ width: size, height: size }} accessibilityLabel={`Energy ${Math.round(clamped)} percent`}>
+    <View style={{ width: size, height: size }} accessibilityLabel={percent === null ? "Energy unavailable" : `Estimated energy ${Math.round(clamped)} percent`}>
       <Svg width={size} height={size}>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={strokeWidth} fill={track} />
         <Circle
@@ -50,7 +50,7 @@ export function EnergyRing({ percent, size = 168, strokeWidth = 18 }: Props) {
       </Svg>
       <View style={styles.center}>
         <Ionicons name={good ? "happy-outline" : "remove-circle-outline"} size={30} color={color} />
-        <Text style={styles.percent}>{Math.round(clamped)}%</Text>
+        <Text style={styles.percent}>{percent === null ? "—" : `${Math.round(clamped)}%`}</Text>
         <Text style={[styles.label, { color }]}>Energy</Text>
       </View>
     </View>

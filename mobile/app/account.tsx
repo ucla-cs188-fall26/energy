@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { syncPendingProfile } from "@/features/onboarding/sync";
+import { useOnboardingStore } from "@/features/onboarding/store";
 import { Card } from "@/components/Card";
 import { BackButton } from "@/features/onboarding/components/AuthParts";
 import { useProfileSettings } from "@/features/profile/store";
@@ -15,6 +17,8 @@ const DANGER = "#B42318";
 export default function AccountScreen() {
   const { session, signOut } = useAuth();
   const { name } = useProfileSettings();
+  const answers = useOnboardingStore();
+  const pending = answers.pendingSync && !!session?.user.email && session.user.email.toLowerCase() === answers.signupEmail?.toLowerCase();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -39,6 +43,10 @@ export default function AccountScreen() {
         </View>
 
         <Card style={styles.list}>
+          {pending ? <Row label="Retry saving setup preferences" disabled={busy} onPress={() => perform(async () => {
+            if (session) await syncPendingProfile(session.user);
+            return "Setup preferences saved.";
+          })} /> : null}
           <Row label="Edit profile" disabled={busy} onPress={() => router.push("/edit-profile")} />
           <Row label="Verify backend connection" divider disabled={busy} onPress={() => perform(async () => {
             const user = await getCurrentUser();

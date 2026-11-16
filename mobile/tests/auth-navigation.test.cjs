@@ -6,7 +6,7 @@ const ts = require('typescript');
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
-let auth, email, redirects, passwordUpdates;
+let auth, email, redirects, passwordUpdates, profileSets = [];
 const Stack = ({ children }) => React.createElement('Stack', null, children);
 Stack.Screen = (props) => React.createElement('Screen', props);
 Stack.Protected = ({ guard, children }) => guard ? React.createElement(React.Fragment, null, children) : null;
@@ -24,6 +24,11 @@ Module._load = function (name, ...args) {
   if (name === '@/hooks/useAuth') return { AuthProvider: passthrough, useAuth: () => auth };
   if (name === '@/hooks/useEmailAuth') return { EmailAuthProvider: passthrough, useEmailAuth: () => email };
   if (name === '@/services/auth-links') return { AUTHENTICATED_DESTINATION: '/(tabs)' };
+  if (name === '@/services/tracking-scope') return { changeTrackingOwner: () => {} };
+  if (name === '@/services/tracking-sync') return { useTrackingSync: { getState: () => ({ reset() {}, refresh: async () => {} }) } };
+  if (name === '@/features/sleep/store') return { useSleepStore: { getState: () => ({ reset() {} }) } };
+  if (name === '@/features/caffeine/store') return { useCaffeineStore: { getState: () => ({ reset() {} }) } };
+  if (name === '@/features/profile/store') return { useProfileStore: { getState: () => ({ setProfile(profile) { profileSets.push(profile); } }) } };
   if (name === '@/features/onboarding/sync') return { useSyncOnboardingProfile: () => {} };
   return load.call(this, name, ...args);
 };
@@ -36,6 +41,7 @@ const Callback = require('../app/auth/callback.tsx').default;
 function defaults() {
   redirects = [];
   passwordUpdates = [];
+  profileSets = [];
   auth = { session: null, loading: false };
   email = { ready: true, processing: false, recovery: false, error: null, success: false, resultId: 0,
     finishRecovery: async (password) => passwordUpdates.push(password) };
@@ -65,6 +71,23 @@ test('navigator stays mounted throughout cold-start and warm callback processing
     await act(async () => tree.update(React.createElement(Root)));
     assert.equal(redirects.at(-1), '/auth/reset-password');
     assert.equal(tree.root.findAllByType('Screen').some((s) => s.props.name === '(auth)/login'), false);
+  } finally { await act(async () => tree.unmount()); }
+});
+
+test('cached profile survives session restoration and is cleared only once signed out', async () => {
+  defaults();
+  auth.loading = true;
+  email.ready = false;
+  const tree = await render(Root);
+  try {
+    assert.deepEqual(profileSets, [], 'no session yet while restoring must not clear the cache');
+    auth = { session: { user: { id: 'demo' } }, loading: false };
+    email.ready = true;
+    await act(async () => tree.update(React.createElement(Root)));
+    assert.deepEqual(profileSets, []);
+    auth = { session: null, loading: false };
+    await act(async () => tree.update(React.createElement(Root)));
+    assert.deepEqual(profileSets, [null]);
   } finally { await act(async () => tree.unmount()); }
 });
 

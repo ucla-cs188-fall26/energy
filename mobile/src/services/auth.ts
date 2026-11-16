@@ -26,7 +26,9 @@ export async function requestPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: AUTH_CALLBACK_URL,
   });
-  if (error) throw new Error("Unable to send the reset email. Please try again later.");
+  if (error) throw new Error(error.status === 429
+    ? "Email requests are rate limited. Wait before requesting another reset email."
+    : "Unable to send the reset email. Please try again later.");
 }
 
 export async function resendVerification(email: string) {

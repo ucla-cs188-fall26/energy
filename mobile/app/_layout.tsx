@@ -5,6 +5,11 @@ import { ActivityIndicator, View } from "react-native";
 import { useSyncOnboardingProfile } from "@/features/onboarding/sync";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { EmailAuthProvider, useEmailAuth } from "@/hooks/useEmailAuth";
+import { changeTrackingOwner } from "@/services/tracking-scope";
+import { useSleepStore } from "@/features/sleep/store";
+import { useCaffeineStore } from "@/features/caffeine/store";
+import { useTrackingSync } from "@/services/tracking-sync";
+import { useProfileStore } from "@/features/profile/store";
 import { AUTHENTICATED_DESTINATION } from "@/services/auth-links";
 
 export default function RootLayout() {
@@ -16,7 +21,19 @@ function Navigation() {
   const { ready, processing, recovery, success, error, resultId } = useEmailAuth();
   const handledResult = useRef(0);
   const waiting = loading || !ready || processing;
-  useSyncOnboardingProfile();
+  useEffect(() => {
+    changeTrackingOwner(session?.user.id ?? null);
+    useSleepStore.getState().reset();
+    useCaffeineStore.getState().reset();
+    useTrackingSync.getState().reset();
+    if (session && !recovery) void useTrackingSync.getState().refresh();
+  }, [session?.user.id, recovery]);
+  // Clear the cached profile on sign-out only. While the stored session is still
+  // being restored there is no session yet, and the cache must survive that.
+  useEffect(() => {
+    if (!loading && !session) useProfileStore.getState().setProfile(null);
+  }, [loading, session?.user.id]);
+  useSyncOnboardingProfile(!recovery);
 
   useEffect(() => {
     if (waiting || resultId <= handledResult.current) return;

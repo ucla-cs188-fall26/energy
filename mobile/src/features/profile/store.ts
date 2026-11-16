@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { supabase } from "@/services/supabase";
 import { useOnboardingStore } from "@/features/onboarding/store";
 import { useAuth } from "@/hooks/useAuth";
 import { getProfile, ProfilePreferences, saveProfile, UserProfile } from "@/services/api";
@@ -23,9 +24,14 @@ export const useProfileStore = create<ProfileState>()(
 
 /** Refreshes the cached profile from the backend. Failures keep the cache. */
 export async function refreshProfile() {
+  const cachedBefore = useProfileStore.getState().profile;
   try {
+    const { data: { session: before } } = await supabase.auth.getSession();
+    if (!before) return;
     const profile = await getProfile();
-    if (profile) useProfileStore.getState().setProfile(profile);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (useProfileStore.getState().profile !== cachedBefore) return;
+    if (before.user.id === session?.user.id && (!profile || profile.id === session.user.id)) useProfileStore.getState().setProfile(profile);
   } catch {
     // Backend unreachable or session expired; keep showing the cached profile.
   }
@@ -36,8 +42,11 @@ export async function refreshProfile() {
  * Throws if the backend can't be reached, so the screen can show an error.
  */
 export async function updateProfile(changes: ProfilePreferences) {
-  const profile = await saveProfile(changes);
-  useProfileStore.getState().setProfile(profile);
+  const { data: { session: before } } = await supabase.auth.getSession();
+  if (!before) throw new Error("Please sign in first");
+  const profile = await saveProfile(changes, before.user.id);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (profile.id === session?.user.id) useProfileStore.getState().setProfile(profile);
   return profile;
 }
 
@@ -69,12 +78,15 @@ export type ProfileSettings = {
 export function useProfileSettings(): ProfileSettings {
   const profile = useMyProfile();
   const onboarding = useOnboardingStore();
+  const { session } = useAuth();
+  const ownAnswers = onboarding.pendingSync && !!session?.user.email &&
+    session.user.email.toLowerCase() === onboarding.signupEmail?.toLowerCase();
 
-  const name = profile?.display_name ?? (onboarding.pendingSync ? onboarding.fullName : null);
+  const name = profile?.display_name ?? (ownAnswers ? onboarding.fullName : null);
   return {
     name,
     firstName: name ? name.split(" ")[0] : null,
-    bedtimeMinutes: clockMinutes(profile?.usual_bedtime) ?? onboarding.bedtimeMinutes,
-    wakeMinutes: clockMinutes(profile?.usual_wake_time) ?? onboarding.wakeMinutes,
+    bedtimeMinutes: clockMinutes(profile?.usual_bedtime) ?? (ownAnswers ? onboarding.bedtimeMinutes : 23 * 60),
+    wakeMinutes: clockMinutes(profile?.usual_wake_time) ?? (ownAnswers ? onboarding.wakeMinutes : 7 * 60),
   };
 }

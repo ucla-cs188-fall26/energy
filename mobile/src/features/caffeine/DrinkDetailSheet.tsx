@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Chip } from "@/components/Chip";
 import { colors, radius, spacing } from "@/utils/theme";
 
-import { DrinkCategory } from "./catalog";
+import { DrinkCategory, PRESET_IDS, servingMl } from "./catalog";
 import { useCaffeineStore } from "./store";
 
 const WHEN_OPTIONS = [
@@ -16,13 +16,6 @@ const WHEN_OPTIONS = [
   { label: "1h ago", minutesAgo: 60 },
   { label: "2h ago", minutesAgo: 120 },
   { label: "3h ago", minutesAgo: 180 },
-];
-
-const SPEED_OPTIONS = [
-  { label: "Quick (<15 min)", minutes: 10 },
-  { label: "~30 min", minutes: 30 },
-  { label: "~1 hour", minutes: 60 },
-  { label: "~2 hours", minutes: 120 },
 ];
 
 const MAX_MG = 1500;
@@ -58,30 +51,43 @@ export function DrinkDetailSheet({ category, onClose, onLogged, onDismiss }: Pro
 
 function SheetContent({ category, onClose, onLogged }: { category: DrinkCategory } & Omit<Props, "category">) {
   const addEntry = useCaffeineStore((s) => s.addEntry);
+  const presets = useCaffeineStore(s => s.presets);
+  const [saving, setSaving] = useState(false);
+  const options = category.options.map(o => {
+    const preset = presets.find(p => p.id === PRESET_IDS[o.id]);
+    return preset ? { ...o, mg: Number(preset.caffeine_mg), ml: String(preset.serving_size_ml) } : { ...o, ml: servingMl(o) };
+  });
+  const [mlText, setMlText] = useState(options[0]?.ml ?? "");
   const isCustom = category.options.length === 0;
 
   const [optionId, setOptionId] = useState(category.options[0]?.id);
-  const [mgText, setMgText] = useState(category.options[0] ? String(category.options[0].mg) : "");
+  const [mgText, setMgText] = useState(options[0] ? String(options[0].mg) : "");
   const [customName, setCustomName] = useState("");
   const [minutesAgo, setMinutesAgo] = useState(0);
-  const [durationMinutes, setDurationMinutes] = useState(SPEED_OPTIONS[0].minutes);
 
-  const option = category.options.find((o) => o.id === optionId);
+
+  const option = options.find((o) => o.id === optionId);
   const mg = Number(mgText);
-  const valid = mgText.trim() !== "" && Number.isFinite(mg) && mg > 0 && mg <= MAX_MG;
+  const valid = mgText.trim() !== "" && Number.isFinite(mg) && mg >= 0 && mg <= MAX_MG && Number(mlText) > 0 && Number(mlText) < 100000000 && (!isCustom || customName.trim().length <= 150);
 
-  const log = () => {
-    if (!valid) return;
+  const log = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
     const name = isCustom ? customName.trim() || "Custom drink" : option ? `${option.label} (${option.size})` : category.name;
-    addEntry({
+    await addEntry({
       name,
-      mg: Math.round(mg),
+      mg: Math.round(mg * 100) / 100,
+      servingSizeMl: Number(Number(mlText).toFixed(2)),
+      presetId: presets.some(p => p.id === PRESET_IDS[optionId ?? ""]) ? PRESET_IDS[optionId ?? ""] : undefined,
       consumedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
-      durationMinutes,
+      durationMinutes: 0,
       categoryId: category.id,
       optionId: isCustom ? undefined : optionId,
     });
     onLogged();
+    } catch (e) { Alert.alert("Unable to log drink", e instanceof Error ? e.message : "Please try again."); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -114,7 +120,7 @@ function SheetContent({ category, onClose, onLogged }: { category: DrinkCategory
           <>
             <Text style={styles.sectionTitle}>Brand & size</Text>
             <View style={styles.card}>
-              {category.options.map((o, i) => {
+              {options.map((o, i) => {
                 const selected = o.id === optionId;
                 return (
                   <Pressable
@@ -122,6 +128,7 @@ function SheetContent({ category, onClose, onLogged }: { category: DrinkCategory
                     onPress={() => {
                       setOptionId(o.id);
                       setMgText(String(o.mg));
+                      setMlText(o.ml);
                     }}
                     style={[styles.optionRow, i > 0 && styles.divider, selected && styles.optionSelected]}
                     accessibilityRole="radio"
@@ -155,6 +162,8 @@ function SheetContent({ category, onClose, onLogged }: { category: DrinkCategory
         />
         <Text style={styles.hint}>Amounts are approximate. Check the label and edit if needed.</Text>
 
+        <Text style={styles.sectionTitle}>Serving volume (ml)</Text>
+        <TextInput style={styles.input} keyboardType="decimal-pad" value={mlText} onChangeText={setMlText} placeholder="e.g. 237" />
         <Text style={styles.sectionTitle}>When did you start drinking it?</Text>
         <View style={styles.chips}>
           {WHEN_OPTIONS.map((o) => (
@@ -167,22 +176,11 @@ function SheetContent({ category, onClose, onLogged }: { category: DrinkCategory
           ))}
         </View>
 
-        <Text style={styles.sectionTitle}>How fast did you drink it?</Text>
-        <View style={styles.chips}>
-          {SPEED_OPTIONS.map((o) => (
-            <Chip
-              key={o.label}
-              label={o.label}
-              selected={o.minutes === durationMinutes}
-              onPress={() => setDurationMinutes(o.minutes)}
-            />
-          ))}
-        </View>
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable onPress={log} disabled={!valid} style={[styles.logButton, !valid && styles.logButtonDisabled]}>
-          <Text style={styles.logButtonText}>{valid ? `Log ${Math.round(mg)} mg` : "Enter caffeine amount"}</Text>
+        <Pressable onPress={log} disabled={!valid || saving} style={[styles.logButton, !valid && styles.logButtonDisabled]}>
+          <Text style={styles.logButtonText}>{saving ? "Saving…" : valid ? `Log ${mg} mg` : "Enter caffeine and serving volume"}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

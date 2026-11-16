@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "@/components/Card";
@@ -8,13 +8,17 @@ import { EnergyRing } from "@/components/EnergyRing";
 import { QuickAction } from "@/components/QuickAction";
 import { StatCard } from "@/components/StatCard";
 import { useCaffeineSummary } from "@/features/caffeine/useCaffeineSummary";
-import { energyStatus, homeForecast } from "@/features/energy/forecast";
+import { energyStatus } from "@/features/energy/forecast";
 import { ForecastChart } from "@/features/energy/ForecastChart";
 import { useProfileSettings } from "@/features/profile/store";
-import { formatDuration, formatHour, formatTime, wakingDay } from "@/features/schedule";
-import { PLACEHOLDER_QUALITY, sessionMinutes, useLastSleep, useSleepStore } from "@/features/sleep/store";
+import { formatDuration } from "@/features/schedule";
+import { sessionMinutes, useLastSleep, useSleepStore } from "@/features/sleep/store";
 import { useNow } from "@/hooks/useNow";
 import { colors } from "@/utils/theme";
+
+import { useTrackingSync } from "@/services/tracking-sync";
+import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
+import { SyncStatus } from "@/components/SyncStatus";
 
 const DIP_COLOR = "#B45309";
 
@@ -25,20 +29,20 @@ function greeting(now: number) {
 
 export default function HomeScreen() {
   const now = useNow();
-  const { firstName, name, wakeMinutes, bedtimeMinutes } = useProfileSettings();
+  useTrackingRefresh();
+  const prediction = useTrackingSync(s => s.prediction);
+  const { firstName, name } = useProfileSettings();
   const caffeine = useCaffeineSummary(now);
   const lastSleep = useLastSleep();
+  const activeSleep = useSleepStore(s => s.active);
   const startSleep = useSleepStore((s) => s.startSleep);
 
-  const { wake, bedtime } = wakingDay(wakeMinutes, bedtimeMinutes, now);
-  const energy = homeForecast(now, wake, bedtime);
-  const steady = energy.steadyHours != null && energy.steadyHours >= 0.5
-    ? `Steady energy for about ${formatDuration(Math.round(energy.steadyHours * 2) * 30)}. ` : "";
-  const outlook = energy.night
-    ? `Get some rest. Tomorrow’s forecast starts at ${formatTime(energy.start)}.`
-    : energy.dip != null
-      ? `${steady}A dip is likely around ${formatTime(energy.dip)}.`
-      : "Your energy will wind down toward bedtime.";
+  const points = prediction ? [prediction, ...prediction.forecast]
+    .filter(p => p.score !== null).map(p => ({ t: Date.parse(p.timestamp), value: p.score! })) : [];
+  const energy = { now: prediction?.score ?? null, points, dip: null, steadyHours: null };
+  const outlook = prediction?.status === "sleeping" ? "Sleep or nap session in progress."
+    : prediction?.score != null ? "Formula estimate based on recorded sleep, naps, and caffeine. Not a measured energy level."
+    : "Record a completed night of sleep to estimate your energy.";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -64,33 +68,34 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        <SyncStatus />
         <Card>
           <View style={styles.energyRow}>
             <EnergyRing percent={energy.now} />
             <View style={styles.energyText}>
-              <Text style={styles.status}>{energy.night ? "It’s past your bedtime" : energyStatus(energy.now)}</Text>
+              <Text style={styles.status}>{energy.now === null ? "Energy unavailable" : energyStatus(energy.now)}</Text>
               <Text style={styles.statusSub}>{outlook}</Text>
             </View>
           </View>
 
           <View style={styles.forecastHeader}>
-            <Text style={styles.forecastTitle}>{energy.night ? "Tomorrow’s forecast" : "Today’s forecast"}</Text>
-            {energy.dip != null ? <Text style={styles.dip}>Dip ~{formatTime(energy.dip)}</Text> : null}
+            <Text style={styles.forecastTitle}>Today’s forecast</Text>
+
           </View>
-          <ForecastChart forecast={energy} startLabel={energy.night ? formatHour(energy.start) : "Now"} />
+          <ForecastChart forecast={{ ...energy, now: energy.now ?? 0 }} emptyMessage={prediction?.status === "sleeping" ? "Stop the active sleep or nap session to see a forecast." : undefined} />
         </Card>
 
         <View style={styles.row}>
           <StatCard
             icon="moon-outline"
-            label="Last night"
+            label="Last sleep"
             value={lastSleep ? formatDuration(sessionMinutes(lastSleep)) : "—"}
-            detail={lastSleep ? `Quality ${PLACEHOLDER_QUALITY}/5` : "No sleep logged"}
+            detail={lastSleep ? (lastSleep.quality ? `Quality ${lastSleep.quality}/5` : "Not rated") : "No sleep logged"}
           />
           <StatCard
             icon="cafe-outline"
             label="In system now"
-            value={`${caffeine.inSystemMg} mg`}
+            value={`${prediction ? Math.round(prediction.caffeine_remaining_mg) : caffeine.inSystemMg} mg`}
             detail={`${caffeine.todayMg} mg today`}
           />
         </View>
@@ -98,7 +103,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Quick actions</Text>
         <View style={styles.row}>
           <QuickAction icon="add" label="Log drink" onPress={() => router.push("/log-drink")} />
-          <QuickAction icon="moon-outline" label="Start sleep" onPress={() => { startSleep(); router.push("/sleeping"); }} />
+          <QuickAction icon="moon-outline" label={activeSleep ? "Resume sleep" : "Start sleep"} onPress={async () => { try { await startSleep(); router.push("/sleeping"); } catch (e) { Alert.alert("Unable to start sleep", e instanceof Error ? e.message : "Please try again."); } }} />
           <QuickAction icon="timer-outline" label="Log nap" onPress={() => router.push("/log-nap")} />
         </View>
       </ScrollView>

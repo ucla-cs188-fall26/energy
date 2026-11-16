@@ -40,7 +40,7 @@ export default function SleepScheduleScreen() {
   return (
     <EditScreen
       title="Sleep schedule"
-      subtitle="Your bedtime and wake time set your energy forecast and caffeine cutoff."
+      subtitle="Your usual schedule helps estimate daily rhythm and caffeine at bedtime."
       canSave={changed}
       saving={saving}
       error={error}

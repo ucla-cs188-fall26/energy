@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/services/supabase";
 import { useProfileStore } from "@/features/profile/store";
 import { completePreferences, ProfilePreferences, saveProfile } from "@/services/api";
 import { OnboardingAnswers, sleepWindowMinutes, toApiTime, useOnboardingStore } from "./store";
@@ -14,11 +15,8 @@ export function toProfilePreferences(a: OnboardingAnswers): ProfilePreferences {
     caffeine_frequency: a.caffeineFrequency,
     caffeine_sensitivity: a.sensitivity,
     selected_side_effects: a.sideEffects ?? [],
-    sex: a.sex,
-    age_years: a.ageYears,
-    weight_kg: a.weightKg,
-    height_cm: a.heightCm,
-    measurement_units: a.units,
+    sex: a.sex, age_years: a.ageYears, weight_kg: a.weightKg,
+    height_cm: a.heightCm, measurement_units: a.units,
   };
 }
 
@@ -27,36 +25,33 @@ function hasRequiredAnswers(p: ProfilePreferences) {
   return !!(p.display_name && p.usual_bedtime && p.usual_wake_time && p.sleep_goal_minutes
     && p.caffeine_frequency && p.caffeine_sensitivity);
 }
+let pending: { user: string; promise: Promise<void> } | null = null;
 
-/**
- * After signup, saves the onboarding answers to the user's profile the first
- * time a session exists. That may be right away, or only after the user
- * confirms their email and signs in. If the API is unreachable, the answers
- * stay on the device and saving is retried on the next launch or sign-in.
- */
-export function useSyncOnboardingProfile() {
+/** Retryable, account-bound sync. Never copy another account's local answers. */
+export function syncPendingProfile(user: { id: string; email?: string }) {
+  if (pending?.user === user.id) return pending.promise;
+  const answers = useOnboardingStore.getState();
+  if (!answers.pendingSync || !user.email || user.email.toLowerCase() !== answers.signupEmail?.toLowerCase()) return Promise.resolve();
+  const promise = (async () => {
+    const preferences = toProfilePreferences(answers);
+    let profile = await saveProfile(preferences, user.id);
+    if (hasRequiredAnswers(preferences)) profile = await completePreferences(user.id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user.id !== user.id) return;
+    useProfileStore.getState().setProfile(profile);
+    if (useOnboardingStore.getState() === answers) useOnboardingStore.getState().reset();
+  })().finally(() => { if (pending?.user === user.id) pending = null; });
+  pending = { user: user.id, promise };
+  return promise;
+}
+
+export function useSyncOnboardingProfile(enabled = true) {
   const { session } = useAuth();
-  const pending = useOnboardingStore((s) => s.pendingSync);
-  const signupEmail = useOnboardingStore((s) => s.signupEmail);
-  const running = useRef(false);
-
+  const pending = useOnboardingStore(s => s.pendingSync);
+  const signupEmail = useOnboardingStore(s => s.signupEmail);
   useEffect(() => {
-    if (!session || !pending || running.current) return;
-    // Never apply one person's answers to a different account on a shared device.
-    if (session.user.email?.toLowerCase() !== signupEmail?.toLowerCase()) return;
-    running.current = true;
-    void (async () => {
-      try {
-        const preferences = toProfilePreferences(useOnboardingStore.getState());
-        let profile = await saveProfile(preferences);
-        if (hasRequiredAnswers(preferences)) profile = await completePreferences();
-        useProfileStore.getState().setProfile(profile);
-        useOnboardingStore.getState().reset();
-      } catch (cause) {
-        console.warn("Onboarding profile not saved yet; will retry.", cause);
-      } finally {
-        running.current = false;
-      }
-    })();
-  }, [session, pending, signupEmail]);
+    if (enabled && session && pending) void syncPendingProfile(session.user).catch(() => {
+      // Answers remain available; Account provides a visible retry action.
+    });
+  }, [enabled, session?.user.id, pending, signupEmail]);
 }

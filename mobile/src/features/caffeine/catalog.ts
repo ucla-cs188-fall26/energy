@@ -126,3 +126,16 @@ export const DRINK_CATEGORIES: DrinkCategory[] = [
 export function categoryIcon(categoryId?: string): DrinkCategory["icon"] {
   return DRINK_CATEGORIES.find((c) => c.id === categoryId)?.icon ?? "cafe-outline";
 }
+
+/** Only these catalog choices correspond to the shared Supabase presets. */
+export const PRESET_IDS: Record<string, string> = {
+  "coffee-8": "brewed-coffee", "espresso-single": "espresso-single",
+  "espresso-double": "espresso-double", "black-tea": "black-tea", "green-tea": "green-tea",
+};
+export function servingMl(option: DrinkOption | undefined): string {
+  if (!option) return "";
+  const oz = /(\d+(?:\.\d+)?)\s*oz/.exec(option.size);
+  if (oz) return String(Math.round(Number(oz[1]) * 29.5735 * 100) / 100);
+  if (option.id.includes("espresso")) return /double|doppio/.test(option.id) ? "60" : "30";
+  return ""; // Ask the user instead of inventing a volume for powders or lattes.
+}

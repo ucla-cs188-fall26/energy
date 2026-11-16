@@ -3,6 +3,8 @@ export type CaffeineEntry = {
   /** Display name, e.g. "Monster Energy (16 oz)". */
   name: string;
   mg: number;
+  servingSizeMl?: number;
+  presetId?: string;
   /** ISO timestamp of when the user started drinking (not when it was logged). */
   consumedAt: string;
   /** How long it took to finish the drink. Affects how fast caffeine is absorbed. */

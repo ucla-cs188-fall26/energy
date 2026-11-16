@@ -28,7 +28,7 @@ export default function AboutYouStep() {
       <View style={styles.privacy}>
         <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
         <Text style={[stepStyles.helper, styles.privacyText]}>
-          Only used to personalize your caffeine estimates. You can change it anytime in your account.
+          These details are saved with your profile. You can change them anytime in your account.
         </Text>
       </View>
     </StepScreen>

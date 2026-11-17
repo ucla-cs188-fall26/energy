@@ -61,6 +61,8 @@ function Navigation() {
           <Stack.Screen name="edit-profile" />
           <Stack.Screen name="sleep-schedule" />
           <Stack.Screen name="sleeping" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
+          <Stack.Screen name="napping" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
+          <Stack.Screen name="rate-session" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="(auth)/welcome" />

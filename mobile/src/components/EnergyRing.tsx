@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 
 import { colors } from "@/utils/theme";
 
@@ -49,11 +48,45 @@ export function EnergyRing({ percent, size = 168, strokeWidth = 18 }: Props) {
         />
       </Svg>
       <View style={styles.center}>
-        <Ionicons name={good ? "happy-outline" : "remove-circle-outline"} size={30} color={color} />
+        <EnergyFace mood={percent === null ? "neutral" : clamped >= 70 ? "happy" : "tired"}
+          color={percent === null ? colors.textMuted : color} />
         <Text style={styles.percent}>{percent === null ? "—" : `${Math.round(clamped)}%`}</Text>
         <Text style={[styles.label, { color }]}>Energy</Text>
       </View>
     </View>
+  );
+}
+
+type Mood = "happy" | "tired" | "neutral";
+
+/** Outline face: happy at 70%+, tired below, neutral when energy is unavailable. */
+function EnergyFace({ mood, color, size = 32 }: { mood: Mood; color: string; size?: number }) {
+  const stroke = { stroke: color, strokeWidth: 2.2, strokeLinecap: "round" as const, fill: "none" };
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32" accessibilityLabel={`${mood} face`}>
+      <Circle cx={16} cy={16} r={13.5} {...stroke} />
+      {mood === "happy" ? (
+        <>
+          <Circle cx={11.5} cy={13} r={1.7} fill={color} />
+          <Circle cx={20.5} cy={13} r={1.7} fill={color} />
+          <Path d="M10.5 19 Q16 24.5 21.5 19" {...stroke} />
+        </>
+      ) : mood === "tired" ? (
+        <>
+          {/* Heavy, half-closed eyes drooping toward the outside. */}
+          <Path d="M8.5 13.5 Q11.5 16 14 13.8" {...stroke} />
+          <Path d="M18 13.8 Q20.5 16 23.5 13.5" {...stroke} />
+          {/* Flat mouth. */}
+          <Path d="M11.5 21.5 H20.5" {...stroke} />
+        </>
+      ) : (
+        <>
+          <Circle cx={11.5} cy={13} r={1.7} fill={color} />
+          <Circle cx={20.5} cy={13} r={1.7} fill={color} />
+          <Path d="M11 20.5 H21" {...stroke} />
+        </>
+      )}
+    </Svg>
   );
 }
 

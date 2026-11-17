@@ -85,6 +85,17 @@ export function sessionMinutes(s: Pick<SleepSession, "startedAt" | "endedAt">) {
   return (Date.parse(s.endedAt) - Date.parse(s.startedAt)) / 60_000;
 }
 
+/** Naps that ended during the local calendar day containing `now`, newest first. */
+export function napsOnDay(naps: Nap[], now: number) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return naps
+    .filter((n) => { const t = Date.parse(n.endedAt); return t >= start.getTime() && t < end.getTime(); })
+    .sort((a, b) => b.endedAt.localeCompare(a.endedAt));
+}
+
 /** Completed cycles, assuming ~90-minute cycles. */
 export function estimateCycles(minutes: number) {
   return Math.floor(minutes / CYCLE_MINUTES);

@@ -28,6 +28,12 @@ export function wakingDay(wakeMinutes: number, bedtimeMinutes: number, now: numb
   return { wake, bedtime: wake + awakeMinutes * MINUTE };
 }
 
+/** "Good morning" before noon, "Good afternoon" until 5 PM, then "Good evening". */
+export function greeting(ms: number) {
+  const h = new Date(ms).getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
 export function formatTime(ms: number) {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

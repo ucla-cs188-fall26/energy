@@ -90,8 +90,8 @@ On a physical phone, replace `127.0.0.1` with your Mac's reachable network addre
 
 1. **Log in** with a test account. For a new account, choose **Get started**, complete setup, and sign up. If prompted to verify your email, open the link on the same device that requested it, then log in.
 2. **Check the connection:** open **Account → Verify backend connection**. Your email should appear in the success message.
-3. **Track sleep:** open **Sleep → Start sleep**, then **Stop sleep**. Under **Last sleep**, rate the session and view its duration and estimated cycles. Check **History** for the saved entry.
-4. **Log caffeine:** open **Caffeine** and select a quick-add drink. For a custom drink, choose **More drinks → Other**, enter its name, caffeine in mg, and serving volume in ml, then log it. Check the daily total; use the edit/delete controls to change an entry.
+3. **Track sleep:** open **Sleep → Start sleep**, then **Stop sleep**. Answer **How refreshed do you feel?** (1–5) on the screen that appears. Check **History** for the saved entry with its duration and rating.
+4. **Log caffeine:** open **Caffeine** and select a quick-add drink. For a custom drink, choose **Add another drink → Other**, enter its name, caffeine in mg, and serving volume in ml, then log it. Check the daily total; use the edit/delete controls to change an entry.
 5. **View prediction:** return to **Home** to see the energy circle, caffeine remaining, and hourly forecast update from your recorded data. Energy is unavailable without recent completed sleep or while sleep/a nap is active. The score is a formula estimate, not a validated measurement.
 6. **Optional:** log a nap with a refreshed rating, or record a 1–10 energy rating under **Insights**. Reload the app to check that your login and saved history persist.
 

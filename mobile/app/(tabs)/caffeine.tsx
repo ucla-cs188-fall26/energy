@@ -159,9 +159,11 @@ export default function CaffeineScreen() {
             </Pressable>
           ))}
         </View>
-        <Pressable accessibilityRole="button" onPress={() => router.push("/log-drink")}
+        <Pressable accessibilityRole="button" accessibilityLabel="Add another drink"
+          onPress={() => router.push("/log-drink")}
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
-          <Text style={styles.link}>More drinks</Text>
+          <Ionicons name="add-circle" size={24} color={colors.surface} />
+          <Text style={styles.moreText}>Add another drink</Text>
         </Pressable>
 
         <Pressable onPress={() => setHistory(!history)}><Text style={styles.link}>{history ? "Show today" : "Show all history"}</Text></Pressable>
@@ -236,13 +238,15 @@ const styles = StyleSheet.create({
   quickName: { fontSize: 17, fontWeight: "700", color: colors.text },
   quickMg: { fontSize: 15, color: colors.textMuted },
   more: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    justifyContent: "center",
+    gap: 10,
+    height: 56,
     borderRadius: 18,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.primary,
   },
+  moreText: { fontSize: 18, fontWeight: "700", color: colors.surface },
   list: { paddingVertical: 8 },
   drinkRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },

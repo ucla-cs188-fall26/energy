@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { router, Tabs } from "expo-router";
 import { ComponentProps, useEffect } from "react";
 import { ColorValue } from "react-native";
 
 import { refreshProfile } from "@/features/profile/store";
+import { ratingPrompt, usePendingRating } from "@/features/sleep/rating";
 import { colors } from "@/utils/theme";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -18,6 +19,15 @@ function tabIcon(filled: IconName, outline: IconName) {
 export default function TabsLayout() {
   // Pick up the latest name and sleep schedule each time the signed-in app opens.
   useEffect(() => { void refreshProfile(); }, []);
+
+  // A sleep or nap that ended without a rating (e.g. the app was closed on the
+  // rating screen) is asked about before the user carries on.
+  const pending = usePendingRating();
+  useEffect(() => {
+    if (!pending || ratingPrompt.open) return;
+    ratingPrompt.open = true;
+    router.push({ pathname: "/rate-session", params: { kind: pending.kind, id: pending.session.id } });
+  }, [pending?.session.id]);
 
   return (
     <Tabs

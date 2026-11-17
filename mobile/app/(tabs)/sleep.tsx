@@ -13,14 +13,13 @@ import { formatClock, formatDuration as formatSleepWindow, sleepWindowMinutes } 
 import { useProfileSettings } from "@/features/profile/store";
 import { formatDuration, formatTime, nextOccurrence } from "@/features/schedule";
 import {
-  estimateCycles, SleepSession, sessionMinutes, useLastSleep, useSleepStore,
+  napsOnDay, sessionMinutes, useSleepStore,
 } from "@/features/sleep/store";
 import { useNow } from "@/hooks/useNow";
 import { colors } from "@/utils/theme";
 
 import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
 import { SyncStatus } from "@/components/SyncStatus";
-import { Chip } from "@/components/Chip";
 const SUCCESS = "#15803D";
 const SUCCESS_SOFT = "#E7F6EC";
 const WARN = "#B45309";
@@ -63,7 +62,6 @@ function Tonight() {
   const { atBedtimeMg } = useCaffeineSummary(now);
   const active = useSleepStore((s) => s.active);
   const startSleep = useSleepStore((s) => s.startSleep);
-  const lastSleep = useLastSleep();
 
   const minutesUntil = Math.round((nextOccurrence(bedtimeMinutes, now) - now) / MINUTE) % (24 * 60);
   const caffeineOk = atBedtimeMg < BEDTIME_OK_MG;
@@ -83,17 +81,30 @@ function Tonight() {
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Sleep schedule: bedtime ${formatClock(bedtimeMinutes)}, wake time ${formatClock(wakeMinutes)}. Edit`}
-          onPress={() => router.push("/sleep-schedule")}
-          style={({ pressed }) => [styles.scheduleRow, pressed && styles.pressed]}
-        >
-          <ScheduleCell label="Bedtime" value={formatClock(bedtimeMinutes)} />
-          <ScheduleCell label="Wake time" value={formatClock(wakeMinutes)} divider />
-          <ScheduleCell label="Window" value={formatSleepWindow(sleepWindowMinutes(bedtimeMinutes, wakeMinutes))} divider />
-          <Ionicons name="create-outline" size={18} color={colors.primary} style={styles.editIcon} />
-        </Pressable>
+        <View style={styles.scheduleBlock}>
+          <View style={styles.lastHeader}>
+            <Text style={styles.scheduleTitle}>Your schedule</Text>
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => router.push("/sleep-schedule")}
+              style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <Text style={styles.pillButtonText}>Edit schedule</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sleep schedule: bedtime ${formatClock(bedtimeMinutes)}, wake time ${formatClock(wakeMinutes)}. Edit`}
+            onPress={() => router.push("/sleep-schedule")}
+            style={({ pressed }) => [styles.scheduleRow, pressed && styles.pressed]}
+          >
+            <ScheduleCell label="Bedtime" value={formatClock(bedtimeMinutes)} />
+            <ScheduleCell label="Wake time" value={formatClock(wakeMinutes)} divider />
+            <ScheduleCell label="Window" value={formatSleepWindow(sleepWindowMinutes(bedtimeMinutes, wakeMinutes))} divider />
+          </Pressable>
+        </View>
 
         <View style={[styles.pill, { backgroundColor: caffeineOk ? SUCCESS_SOFT : WARN_SOFT }]}>
           <Ionicons name={caffeineOk ? "checkmark" : "alert-circle-outline"} size={20} color={caffeineOk ? SUCCESS : WARN} />
@@ -110,25 +121,15 @@ function Tonight() {
 
       <NapsToday now={now} />
 
-      {lastSleep ? <LastNight session={lastSleep} /> : (
-        <Card>
-          <Text style={styles.cardTitle}>Last sleep</Text>
-          <Text style={[styles.muted, styles.emptyText]}>
-            No sleep logged yet. Tap Start sleep when you go to bed.
-          </Text>
-        </Card>
-      )}
     </>
   );
 }
 
 function NapsToday({ now }: { now: number }) {
   const naps = useSleepStore((s) => s.naps);
+  const activeNap = useSleepStore((s) => s.activeNap);
 
-  const startOfDay = new Date(now).setHours(0, 0, 0, 0);
-  const today = naps
-    .filter((n) => Date.parse(n.endedAt) >= startOfDay)
-    .sort((a, b) => b.endedAt.localeCompare(a.endedAt));
+  const today = napsOnDay(naps, now);
 
   return (
     <Card>
@@ -137,13 +138,22 @@ function NapsToday({ now }: { now: number }) {
         <Pressable
           accessibilityRole="button"
           hitSlop={8}
-          onPress={() => router.push("/log-nap")}
-          style={({ pressed }) => [styles.napButton, pressed && styles.pressed]}
+          onPress={() => router.push(activeNap ? "/napping" : "/log-nap")}
+          style={({ pressed }) => [styles.pillButton, pressed && styles.pressed]}
         >
-          <Ionicons name="add" size={20} color={colors.primary} />
-          <Text style={styles.napButtonText}>Log nap</Text>
+          <Ionicons name={activeNap ? "timer-outline" : "add"} size={20} color={colors.primary} />
+          <Text style={styles.pillButtonText}>{activeNap ? "View nap" : "Log nap"}</Text>
         </Pressable>
       </View>
+      {activeNap ? (
+        <View style={styles.napping}>
+          <Ionicons name="timer-outline" size={20} color={colors.primary} />
+          <Text style={styles.nappingText}>
+            Napping since {formatTime(Date.parse(activeNap.startedAt))}
+            {" · "}{formatDuration((now - Date.parse(activeNap.startedAt)) / MINUTE)}
+          </Text>
+        </View>
+      ) : null}
       {today.length ? today.map((n, i) => (
         <View key={n.id} style={[styles.historyRow, i > 0 && styles.historyDivider]}>
           <Text style={[styles.muted, styles.flex]}>
@@ -163,43 +173,6 @@ function ScheduleCell({ label, value, divider }: { label: string; value: string;
     <View style={[styles.cell, divider && styles.cellDivider]}>
       <Text style={styles.cellLabel}>{label}</Text>
       <Text style={styles.cellValue}>{value}</Text>
-    </View>
-  );
-}
-
-function LastNight({ session }: { session: SleepSession }) {
-  const minutes = sessionMinutes(session);
-  const rate = useSleepStore(s => s.rateSleep);
-  const [saving, setSaving] = useState(false);
-  return (
-    <Card>
-      <View style={styles.lastHeader}>
-        <Text style={styles.cardTitle}>Last sleep</Text>
-        <Text style={styles.muted}>
-          {formatTime(Date.parse(session.startedAt))} – {formatTime(Date.parse(session.endedAt))}
-        </Text>
-      </View>
-      <View style={styles.statsRow}>
-        <Stat value={formatDuration(minutes)} label="Asleep" />
-        <Stat value={String(estimateCycles(minutes))} label="Cycles" />
-        <Stat value={session.quality ? `${session.quality}/5` : "—"} label="Quality" />
-      </View>
-      <Text style={[styles.muted, { marginTop: 16 }]}>Rate your sleep · Cycles are estimated, sleep stages are not measured.</Text>
-      <View style={[styles.legend, { flexWrap: "wrap" }]}>
-        {[1,2,3,4,5].map(r => <Chip key={r} label={String(r)} selected={session.quality === r}
-          onPress={async () => { if (saving) return; setSaving(true);
-            try { await rate(session.id, r); } catch (e) { Alert.alert("Unable to save rating", e instanceof Error ? e.message : "Try again."); }
-            finally { setSaving(false); } }} />)}
-      </View>
-    </Card>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.muted}>{label}</Text>
     </View>
   );
 }
@@ -261,9 +234,20 @@ const styles = StyleSheet.create({
   cellDivider: { borderLeftWidth: 2, borderLeftColor: colors.border },
   cellLabel: { fontSize: 14, color: colors.textMuted },
   cellValue: { fontSize: 18, fontWeight: "800", color: colors.text },
-  editIcon: { position: "absolute", top: 8, right: 8 },
+  scheduleBlock: { gap: 10 },
+  scheduleTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
+  napping: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+  },
+  nappingText: { flex: 1, fontSize: 15, fontWeight: "700", color: colors.text },
   pressed: { opacity: 0.6 },
-  napButton: {
+  pillButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -272,7 +256,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.primarySoft,
   },
-  napButtonText: { fontSize: 15, fontWeight: "700", color: colors.primary },
+  pillButtonText: { fontSize: 15, fontWeight: "700", color: colors.primary },
   napTag: { fontWeight: "700", color: colors.primary },
   napValue: { fontSize: 16, fontWeight: "800", color: colors.text, marginRight: 14 },
   pill: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 14 },
@@ -280,13 +264,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 20, fontWeight: "800", color: colors.text },
   emptyText: { marginTop: 8 },
   lastHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  statsRow: { flexDirection: "row", gap: 40, marginTop: 16 },
-  statValue: { fontSize: 28, fontWeight: "800", color: colors.text },
   stageBar: { flexDirection: "row", height: 14, borderRadius: 7, overflow: "hidden", gap: 2, marginTop: 20 },
-  legend: { flexDirection: "row", gap: 20, marginTop: 14 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 15, color: colors.textMuted },
   historyRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
   historyDivider: { borderTopWidth: 1, borderTopColor: colors.border },
   historyDate: { fontSize: 16, fontWeight: "700", color: colors.text },

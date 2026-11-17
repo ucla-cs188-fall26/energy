@@ -6,6 +6,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 import { useProfileSettings } from "@/features/profile/store";
 import { formatDuration, formatTime, nextOccurrence } from "@/features/schedule";
+import { ratingPrompt } from "@/features/sleep/rating";
 import { CYCLE_MINUTES, useSleepStore } from "@/features/sleep/store";
 import { sleepWindowMinutes } from "@/features/onboarding/store";
 import { useNow } from "@/hooks/useNow";
@@ -47,10 +48,19 @@ export default function SleepingScreen() {
   const stop = async () => {
     if (saving) return;
     setSaving(true);
-    try { await stopSleep(); } catch (e) {
+    // This screen opens the rating question itself; keep the tab-level check from opening another.
+    ratingPrompt.open = true;
+    let session;
+    try { session = await stopSleep(); } catch (e) {
+      ratingPrompt.open = false;
       Alert.alert("Unable to stop sleep", e instanceof Error ? e.message : "Try again.");
       setSaving(false); return;
     }
+    if (session) {
+      router.replace({ pathname: "/rate-session", params: { kind: "sleep", id: session.id } });
+      return;
+    }
+    ratingPrompt.open = false;
     if (router.canGoBack()) router.back();
     else router.replace("/(tabs)/sleep");
   };

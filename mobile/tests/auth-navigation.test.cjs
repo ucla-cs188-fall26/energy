@@ -20,7 +20,17 @@ Module._load = function (name, ...args) {
   if (name === 'expo-status-bar') return { StatusBar: () => null };
   if (name === 'react-native') return {
     View: 'View', Text: 'Text', ActivityIndicator: 'ActivityIndicator', Button: 'Button', TextInput: 'TextInput',
+    Pressable: 'Pressable', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView',
+    StyleSheet: { create: (x) => x }, Platform: { OS: 'ios' },
   };
+  // Styling-only dependencies of the restyled auth screens.
+  if (name === 'react-native-safe-area-context') return { SafeAreaView: 'SafeAreaView' };
+  if (name === 'react-native-svg') return { __esModule: true, default: 'Svg', Circle: 'Circle', Path: 'Path', Rect: 'Rect' };
+  if (name === '@expo/vector-icons') return { Ionicons: 'Icon' };
+  if (name === '@/utils/theme') return require('../src/utils/theme.ts');
+  if (name.startsWith('@/features/onboarding/components/')) {
+    return require('../src/features/onboarding/components/' + name.split('/').pop() + '.tsx');
+  }
   if (name === '@/hooks/useAuth') return { AuthProvider: passthrough, useAuth: () => auth };
   if (name === '@/hooks/useEmailAuth') return { EmailAuthProvider: passthrough, useEmailAuth: () => email };
   if (name === '@/services/auth-links') return { AUTHENTICATED_DESTINATION: '/(tabs)' };
@@ -35,6 +45,7 @@ Module._load = function (name, ...args) {
 require.extensions['.tsx'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
 }).outputText, filename);
+require.extensions['.ts'] = require.extensions['.tsx'];
 const Root = require('../app/_layout.tsx').default;
 const Reset = require('../app/auth/reset-password.tsx').default;
 const Callback = require('../app/auth/callback.tsx').default;
@@ -148,4 +159,18 @@ test('callback waits while session restoration is pending', async () => {
   const tree = await render(Callback);
   try { assert.equal(tree.root.findAllByType('ActivityIndicator').length, 1); }
   finally { await act(async () => tree.unmount()); }
+});
+
+test('a failed email link shows the styled error with a way back to log in', async () => {
+  defaults();
+  email.error = 'This link is invalid, expired, or already used.';
+  email.resultId = 1;
+  const tree = await render(Callback);
+  try {
+    const text = tree.root.findAllByType('Text').map((t) => t.children.join('')).join(' ');
+    assert.match(text, /This link didn’t work/);
+    assert.match(text, /invalid, expired, or already used/);
+    assert.match(text, /Back to log in/);
+    assert.match(text, /Request a new reset email/);
+  } finally { await act(async () => tree.unmount()); }
 });

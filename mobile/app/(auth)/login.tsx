@@ -77,7 +77,7 @@ export default function LoginScreen() {
               onSubmitEditing={() => { if (email.trim() && password && !busy) void submit(); }}
               labelAccessory={
                 <Text style={authStyles.link} accessibilityRole="link" disabled={busy}
-                  onPress={() => router.push("/auth/forgot-password")}>
+                  onPress={() => router.push({ pathname: "/auth/forgot-password", params: { email: email.trim() } })}>
                   Forgot password?
                 </Text>
               }

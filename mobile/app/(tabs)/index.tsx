@@ -11,7 +11,7 @@ import { useCaffeineSummary } from "@/features/caffeine/useCaffeineSummary";
 import { energyStatus } from "@/features/energy/forecast";
 import { ForecastChart } from "@/features/energy/ForecastChart";
 import { useProfileSettings } from "@/features/profile/store";
-import { formatDuration } from "@/features/schedule";
+import { formatDuration, greeting } from "@/features/schedule";
 import { sessionMinutes, useLastSleep, useSleepStore } from "@/features/sleep/store";
 import { useNow } from "@/hooks/useNow";
 import { colors } from "@/utils/theme";
@@ -21,11 +21,6 @@ import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
 import { SyncStatus } from "@/components/SyncStatus";
 
 const DIP_COLOR = "#B45309";
-
-function greeting(now: number) {
-  const h = new Date(now).getHours();
-  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-}
 
 export default function HomeScreen() {
   const now = useNow();
@@ -41,7 +36,7 @@ export default function HomeScreen() {
     .filter(p => p.score !== null).map(p => ({ t: Date.parse(p.timestamp), value: p.score! })) : [];
   const energy = { now: prediction?.score ?? null, points, dip: null, steadyHours: null };
   const outlook = prediction?.status === "sleeping" ? "Sleep or nap session in progress."
-    : prediction?.score != null ? "Formula estimate based on recorded sleep, naps, and caffeine. Not a measured energy level."
+    : prediction?.score != null ? "Estimated from your sleep, naps and caffeine."
     : "Record a completed night of sleep to estimate your energy.";
 
   return (
@@ -74,7 +69,7 @@ export default function HomeScreen() {
             <EnergyRing percent={energy.now} />
             <View style={styles.energyText}>
               <Text style={styles.status}>{energy.now === null ? "Energy unavailable" : energyStatus(energy.now)}</Text>
-              <Text style={styles.statusSub}>{outlook}</Text>
+              {outlook ? <Text style={styles.statusSub}>{outlook}</Text> : null}
             </View>
           </View>
 
@@ -104,7 +99,8 @@ export default function HomeScreen() {
         <View style={styles.row}>
           <QuickAction icon="add" label="Log drink" onPress={() => router.push("/log-drink")} />
           <QuickAction icon="moon-outline" label={activeSleep ? "Resume sleep" : "Start sleep"} onPress={async () => { try { await startSleep(); router.push("/sleeping"); } catch (e) { Alert.alert("Unable to start sleep", e instanceof Error ? e.message : "Please try again."); } }} />
-          <QuickAction icon="timer-outline" label="Log nap" onPress={() => router.push("/log-nap")} />
+          <QuickAction icon="timer-outline" label="Log nap"
+            onPress={() => router.push(useSleepStore.getState().activeNap ? "/napping" : "/log-nap")} />
         </View>
       </ScrollView>
     </SafeAreaView>

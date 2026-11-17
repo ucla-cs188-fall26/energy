@@ -1,47 +1,91 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Card } from "@/components/Card";
 import { Chip } from "@/components/Chip";
 import { PrimaryButton } from "@/features/onboarding/components/PrimaryButton";
-import { formatTime } from "@/features/schedule";
+import { Segmented } from "@/features/onboarding/components/Segmented";
+import { formatDuration, formatTime } from "@/features/schedule";
 import { useSleepStore } from "@/features/sleep/store";
 import { colors } from "@/utils/theme";
 
-const WOKE_UP = [
-  { label: "Just now", minutesAgo: 0 },
-  { label: "15m ago", minutesAgo: 15 },
-  { label: "30m ago", minutesAgo: 30 },
-  { label: "1h ago", minutesAgo: 60 },
-  { label: "2h ago", minutesAgo: 120 },
-  { label: "3h ago", minutesAgo: 180 },
-];
-
-const LENGTHS = [
-  { label: "10 min", minutes: 10 },
-  { label: "20 min", minutes: 20 },
-  { label: "30 min", minutes: 30 },
-  { label: "45 min", minutes: 45 },
-  { label: "1 hour", minutes: 60 },
-  { label: "1.5 hours", minutes: 90 },
-  { label: "2 hours", minutes: 120 },
-];
-
 const MINUTE = 60_000;
+const STEP_MINUTES = 5;
+const MIN_NAP_MINUTES = 5;
+const MAX_NAP_MINUTES = 4 * 60;
+/** How far back a past nap can start. */
+const LOOKBACK_MINUTES = 24 * 60;
 
-export default function LogNapScreen() {
-  const { logNap, startNap, stopNap, activeNap } = useSleepStore();
+/** "2:10 PM", or "Yesterday, 11:40 PM" when it isn't today. */
+function formatNapTime(ms: number, today: number) {
+  const sameDay = new Date(ms).toDateString() === new Date(today).toDateString();
+  return sameDay ? formatTime(ms) : `Yesterday, ${formatTime(ms)}`;
+}
+
+function TimeStepRow({ icon, label, value, today, canDecrease, canIncrease, onChange }: {
+  icon: "moon-outline" | "sunny-outline"; label: string; value: number; today: number;
+  canDecrease: boolean; canIncrease: boolean; onChange: (deltaMinutes: number) => void;
+}) {
+  return (
+    <View style={styles.timeRow}>
+      <Ionicons name={icon} size={24} color={icon === "moon-outline" ? colors.primary : "#B8600B"} />
+      <View style={styles.flex}>
+        <Text style={styles.timeLabel}>{label}</Text>
+        <Text style={styles.timeValue}>{formatNapTime(value, today)}</Text>
+      </View>
+      {([[-STEP_MINUTES, "remove", canDecrease, "Earlier"], [STEP_MINUTES, "add", canIncrease, "Later"]] as const).map(
+        ([delta, iconName, enabled, word]) => (
+          <Pressable
+            key={iconName}
+            accessibilityRole="button"
+            accessibilityLabel={`${word} ${label.toLowerCase()}`}
+            accessibilityState={{ disabled: !enabled }}
+            disabled={!enabled}
+            onPress={() => onChange(delta)}
+            style={({ pressed }) => [styles.stepper, pressed && styles.pressed, !enabled && styles.stepperDisabled]}
+          >
+            <Ionicons name={iconName} size={22} color={colors.primary} />
+          </Pressable>
+        ))}
+    </View>
+  );
+}
+
+type Mode = "start" | "past";
+
+/** Required 1–5 "how refreshed did you feel" rating for a past nap. */
+function RefreshedRating({ value, onChange }: { value?: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.ratingBlock}>
+      <Text style={styles.section}>How refreshed did you feel afterwards?</Text>
+      <View style={styles.ratingRow}>
+        {[1, 2, 3, 4, 5].map((r) => (
+          <Chip key={r} label={String(r)} selected={value === r} onPress={() => onChange(r)} />
+        ))}
+      </View>
+      <View style={styles.ratingScale}>
+        <Text style={styles.scaleText}>Groggy</Text>
+        <Text style={styles.scaleText}>Refreshed</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function NapScreen() {
+  const { logNap, startNap, activeNap } = useSleepStore();
+  const [mode, setMode] = useState<Mode>("start");
   const [saving, setSaving] = useState(false);
   const [rating, setRating] = useState<number | undefined>();
-  const [minutesAgo, setMinutesAgo] = useState(0);
-  const [length, setLength] = useState(20);
-  // Fixed when the sheet opens so the summary doesn't drift while choosing.
+  // Fixed when the sheet opens so limits don't drift while choosing.
   const [openedAt] = useState(Date.now);
-
-  const end = openedAt - minutesAgo * MINUTE;
-  const start = end - length * MINUTE;
+  // Default: a 20-minute nap that just ended, on 5-minute marks.
+  const [end, setEnd] = useState(() => Math.floor(openedAt / (STEP_MINUTES * MINUTE)) * STEP_MINUTES * MINUTE);
+  const [start, setStart] = useState(() => end - 20 * MINUTE);
+  const length = (end - start) / MINUTE;
+  const step = STEP_MINUTES * MINUTE;
 
   async function action(work: () => Promise<void>, close = true) {
     if (saving) return;
@@ -50,49 +94,87 @@ export default function LogNapScreen() {
     catch (e) { Alert.alert("Unable to save nap", e instanceof Error ? e.message : "Please try again."); }
     finally { setSaving(false); }
   }
-  const save = () => action(() => logNap({ startedAt: new Date(start).toISOString(), endedAt: new Date(end).toISOString(), quality: rating }));
+
+  const save = () => action(() => logNap({
+    startedAt: new Date(start).toISOString(), endedAt: new Date(end).toISOString(), quality: rating,
+  }));
+
+  // A running nap lives on the dark Napping screen.
+  useEffect(() => { if (activeNap) router.replace("/napping"); }, [activeNap]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <View style={styles.header}>
-        <Text style={styles.title} accessibilityRole="header">Log a nap</Text>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-          <Ionicons name="close" size={26} color={colors.textMuted} />
-        </Pressable>
+      <Header title="Nap" />
+      <View style={styles.switcher}>
+        <Segmented<Mode>
+          accessibilityLabel="Nap options"
+          options={[{ value: "start", label: "Start a nap" }, { value: "past", label: "Log a past nap" }]}
+          value={mode}
+          onChange={setMode}
+          variant="light"
+        />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <PrimaryButton title={activeNap ? "Stop active nap" : "Start nap now"}
-          disabled={saving} onPress={() => action(() => activeNap ? stopNap(rating) : startNap(), !!activeNap)} />
-        <Text style={styles.section}>How refreshed do you feel? (optional)</Text>
-        <View style={styles.chips}>{[1,2,3,4,5].map(r => <Chip key={r} label={String(r)} selected={rating === r} onPress={() => setRating(r)} />)}</View>
-        <Text style={styles.section}>Or log an earlier nap</Text>
-        <Text style={styles.section}>When did you wake up?</Text>
-        <View style={styles.chips}>
-          {WOKE_UP.map((o) => (
-            <Chip key={o.label} label={o.label} selected={o.minutesAgo === minutesAgo}
-              onPress={() => setMinutesAgo(o.minutesAgo)} />
-          ))}
-        </View>
+      {mode === "start" ? (
+        <>
+          <ScrollView contentContainerStyle={styles.content}>
+            <Card style={styles.center}>
+              <View style={styles.iconTile}>
+                <Ionicons name="timer-outline" size={30} color={colors.primary} />
+              </View>
+              <Text style={styles.cardTitle}>Ready for a nap?</Text>
+              <View style={styles.tip}>
+                <Ionicons name="bulb-outline" size={18} color={colors.primary} />
+                <Text style={styles.tipText}>Naps of 20–30 minutes usually avoid grogginess.</Text>
+              </View>
+            </Card>
+            <Pressable accessibilityRole="button" onPress={() => setMode("past")} style={styles.altLink}>
+              <Text style={styles.altText}>Already napped? <Text style={styles.link}>Log a past nap</Text></Text>
+            </Pressable>
+          </ScrollView>
+          <View style={styles.footer}>
+            <PrimaryButton title="Start nap" loading={saving} onPress={() => action(startNap, false)} />
+          </View>
+        </>
+      ) : (
+        <>
+          <ScrollView contentContainerStyle={styles.content}>
+            <Text style={styles.section}>When did you nap?</Text>
+            <Card style={styles.rangeCard}>
+              <TimeStepRow icon="moon-outline" label="Start time" value={start} today={openedAt}
+                canDecrease={length + STEP_MINUTES <= MAX_NAP_MINUTES && start - step >= openedAt - LOOKBACK_MINUTES * MINUTE}
+                canIncrease={length - STEP_MINUTES >= MIN_NAP_MINUTES}
+                onChange={(d) => setStart(start + d * MINUTE)} />
+              <View style={styles.divider} />
+              <TimeStepRow icon="sunny-outline" label="End time" value={end} today={openedAt}
+                canDecrease={length - STEP_MINUTES >= MIN_NAP_MINUTES}
+                canIncrease={length + STEP_MINUTES <= MAX_NAP_MINUTES && end + step <= openedAt}
+                onChange={(d) => setEnd(end + d * MINUTE)} />
+              <View style={styles.summary}>
+                <Text style={styles.summaryLabel}>Nap length</Text>
+                <Text style={styles.summaryText}>{formatDuration(length)}</Text>
+              </View>
+            </Card>
 
-        <Text style={styles.section}>How long did you nap?</Text>
-        <View style={styles.chips}>
-          {LENGTHS.map((o) => (
-            <Chip key={o.label} label={o.label} selected={o.minutes === length}
-              onPress={() => setLength(o.minutes)} />
-          ))}
-        </View>
-
-        <View style={styles.summary}>
-          <Ionicons name="timer-outline" size={22} color={colors.primary} />
-          <Text style={styles.summaryText}>{formatTime(start)} – {formatTime(end)}</Text>
-        </View>
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <PrimaryButton title={saving ? "Saving…" : "Save nap"} disabled={saving || !!activeNap} onPress={save} />
-      </View>
+            <RefreshedRating value={rating} onChange={setRating} />
+          </ScrollView>
+          <View style={styles.footer}>
+            <PrimaryButton title="Save nap" loading={saving} disabled={rating == null} onPress={save} />
+          </View>
+        </>
+      )}
     </SafeAreaView>
+  );
+}
+
+function Header({ title }: { title: string }) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.title} accessibilityRole="header">{title}</Text>
+      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+        <Ionicons name="close" size={26} color={colors.textMuted} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -107,18 +189,63 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: { fontSize: 24, fontWeight: "800", color: colors.text },
+  switcher: { paddingHorizontal: 20, paddingTop: 8 },
   content: { padding: 20, gap: 14 },
-  section: { fontSize: 18, fontWeight: "700", color: colors.text, marginTop: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  summary: {
-    marginTop: 12,
+  center: { alignItems: "center", gap: 10, paddingVertical: 28 },
+  iconTile: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  cardTitle: { fontSize: 22, fontWeight: "800", color: colors.text },
+  tip: {
+    marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 16,
-    borderRadius: 16,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: colors.primarySoft,
   },
-  summaryText: { fontSize: 17, fontWeight: "700", color: colors.text },
+  tipText: { flexShrink: 1, fontSize: 15, color: colors.text },
+  altLink: { alignItems: "center", paddingVertical: 8 },
+  altText: { fontSize: 16, color: colors.textMuted },
+  link: { color: colors.primary, fontWeight: "700" },
+  section: { fontSize: 18, fontWeight: "700", color: colors.text, marginTop: 8 },
+  rangeCard: { gap: 14, padding: 16 },
+  timeRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  flex: { flex: 1 },
+  timeLabel: { fontSize: 15, color: colors.textMuted },
+  timeValue: { fontSize: 20, fontWeight: "800", color: colors.text },
+  stepper: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pressed: { opacity: 0.7 },
+  stepperDisabled: { opacity: 0.35 },
+  divider: { height: 1, backgroundColor: colors.border },
+  summary: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+  },
+  summaryLabel: { fontSize: 16, color: colors.textMuted },
+  summaryText: { fontSize: 16, fontWeight: "800", color: colors.text },
+  ratingBlock: { gap: 10 },
+  ratingRow: { flexDirection: "row", justifyContent: "space-between" },
+  ratingScale: { flexDirection: "row", justifyContent: "space-between" },
+  scaleText: { fontSize: 13, color: colors.textMuted },
   footer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
 });

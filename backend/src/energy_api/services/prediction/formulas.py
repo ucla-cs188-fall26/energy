@@ -126,6 +126,13 @@ def predict(*, now: datetime, zone: ZoneInfo, sleep: list[Interval], naps: list[
     # No future data leakage, including a session that ended after prediction time.
     sleep = [i for i in sleep if utc(i.end) <= now]
     naps = [i for i in naps if utc(i.end) <= now]
+    # Qualify individual main-sleep records before merging. Short main sessions
+    # cannot anchor history or contribute recovery/inertia; naps remain separate.
+    for interval in sleep:
+        if utc(interval.end) <= utc(interval.start):
+            raise ValueError('Sleep must end after it starts')
+    ignored_short_sleep = sum((utc(i.end) - utc(i.start)).total_seconds() < params.min_main_sleep_minutes * 60 for i in sleep)
+    sleep = [i for i in sleep if (utc(i.end) - utc(i.start)).total_seconds() >= params.min_main_sleep_minutes * 60]
     combined = merge_intervals(sleep + naps)
     warnings = ['Heuristic alertness estimate; not a scientifically validated measurement.',
                 'Session duration is treated as sleep; actual sleep stages and latency are unknown.',
@@ -135,6 +142,9 @@ def predict(*, now: datetime, zone: ZoneInfo, sleep: list[Interval], naps: list[
                    'Short gaps following logged sleep are assumed awake; long gaps reset the unknown prior state.',
                    'Forecast assumes continued wakefulness with no new caffeine, sleep, or naps.',
                    'No caffeine logs means no logged intake, not confirmed abstinence.']
+    assumptions.append(f'Main sleep requires at least {params.min_main_sleep_minutes} minutes by product policy; shorter main sessions are excluded, not deleted. Naps are unaffected.')
+    if ignored_short_sleep:
+        warnings.append(f'Excluded {ignored_short_sleep} main sleep session(s) shorter than {params.min_main_sleep_minutes} minutes from prediction inputs; saved history is unchanged.')
     assumptions.append(f'Inputs are limited to a {params.history_days}-day history window; earlier caffeine is omitted.')
     assumptions.append('Caffeine onset ramps the modeled effect; remaining mg still uses immediate-dose exponential elimination.')
     if active:

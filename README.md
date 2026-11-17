@@ -65,7 +65,7 @@ python -m uvicorn energy_api.main:app --reload --port 8000
 
 Check [backend health](http://127.0.0.1:8000/health): it should return `{"status":"ok"}`. API documentation is at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-**Frontend terminal** (open a second terminal at the repository root):
+**Frontend terminal** (open a second terminal at the repository root, inside `mobile/`):
 
 ```sh
 cd mobile

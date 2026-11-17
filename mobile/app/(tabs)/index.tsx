@@ -18,6 +18,9 @@ import { colors } from "@/utils/theme";
 
 import { useTrackingSync } from "@/services/tracking-sync";
 import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
+import { DevelopmentSleepSimulator } from "@/features/energy/DevelopmentSleepSimulator";
+import { useDevelopmentSimulation } from "@/services/development-simulation";
+import { trackingScope } from "@/services/tracking-scope";
 import { SyncStatus } from "@/components/SyncStatus";
 
 const DIP_COLOR = "#B45309";
@@ -25,7 +28,10 @@ const DIP_COLOR = "#B45309";
 export default function HomeScreen() {
   const now = useNow();
   useTrackingRefresh();
-  const prediction = useTrackingSync(s => s.prediction);
+  const actualPrediction = useTrackingSync(s => s.prediction);
+  const preview = useDevelopmentSimulation(s => s.scope === trackingScope.version ? s.prediction : null);
+  const simulation = typeof __DEV__ !== "undefined" && __DEV__ ? preview : null;
+  const prediction = simulation ?? actualPrediction;
   const { firstName, name } = useProfileSettings();
   const caffeine = useCaffeineSummary(now);
   const lastSleep = useLastSleep();
@@ -65,6 +71,9 @@ export default function HomeScreen() {
 
         <SyncStatus />
         <Card>
+          {simulation ? <Text accessibilityRole="alert" style={{ color: colors.primary, fontWeight: "700", marginBottom: 12 }}>
+            Simulation · {simulation.simulated_sleep_minutes} minutes of sleep · Not saved
+          </Text> : null}
           <View style={styles.energyRow}>
             <EnergyRing percent={energy.now} />
             <View style={styles.energyText}>
@@ -78,6 +87,7 @@ export default function HomeScreen() {
 
           </View>
           <ForecastChart forecast={{ ...energy, now: energy.now ?? 0 }} emptyMessage={prediction?.status === "sleeping" ? "Stop the active sleep or nap session to see a forecast." : undefined} />
+          {typeof __DEV__ !== "undefined" && __DEV__ ? <DevelopmentSleepSimulator /> : null}
         </Card>
 
         <View style={styles.row}>

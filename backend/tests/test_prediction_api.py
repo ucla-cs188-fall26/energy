@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from energy_api.core.auth import get_auth_client
 from energy_api.core.config import get_settings
-from energy_api.main import app
+from energy_api.main import app, create_app
 from energy_api.services.energy.checkins import get_energy_now
 from energy_api.services.sleep.sessions import get_sleep_now
 from energy_api.services.naps.sessions import get_nap_now
@@ -27,7 +27,13 @@ DOSE = {**STAMP, 'id': OTHER, 'user_id': USER, 'beverage_name': 'Coffee', 'caffe
 
 
 @pytest.fixture
-def api():
+def api(request):
+    settings = make_settings()
+    if getattr(request, 'param', None) == 'development':
+        settings = settings.model_copy(update={'environment': 'development'})
+        test_app = create_app(settings)
+    else:
+        test_app = app
     state: dict[str, Any] = {'sleep': [dict(SLEEP)], 'naps': [], 'caffeine': [dict(DOSE)], 'profile': [],
                              'active_sleep': [], 'active_nap': [], 'calls': [], 'auth_status': 200}
     def handler(request):
@@ -63,15 +69,15 @@ def api():
     async def client():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
             yield c
-    app.dependency_overrides[get_auth_client] = client
-    app.dependency_overrides[get_settings] = lambda: make_settings()
+    test_app.dependency_overrides[get_auth_client] = client
+    test_app.dependency_overrides[get_settings] = lambda: settings
     for clock in (get_energy_now, get_sleep_now, get_nap_now, get_caffeine_now):
-        app.dependency_overrides[clock] = lambda: NOW
+        test_app.dependency_overrides[clock] = lambda: NOW
     try:
-        with TestClient(app) as c:
+        with TestClient(test_app) as c:
             yield c, state
     finally:
-        app.dependency_overrides.clear()
+        test_app.dependency_overrides.clear()
 
 
 def test_stable_contract_without_goal_or_profile(api):
@@ -81,7 +87,7 @@ def test_stable_contract_without_goal_or_profile(api):
     result = response.json()
     assert result['status'] == 'estimated'
     assert result['model_type'] == 'two_process_heuristic'
-    assert result['model_version'] == '1.0.0'
+    assert result['model_version'] == '1.1.0'
     assert 0 <= result['score'] <= 100
     assert result['caffeine_remaining_mg'] == 50
     assert result['personal_sleep_goal_minutes'] is None
@@ -157,3 +163,27 @@ def test_upstream_failure_not_masked_as_missing_data(api, failure):
     response = c.get(PATH, headers=HEADERS)
     assert response.status_code == 503
     assert 'private database' not in response.text
+
+
+def test_short_sleep_is_ignored_and_an_earlier_reference_is_preserved(api):
+    c, state = api
+    original = c.get(PATH, headers=HEADERS).json()
+    previous = dict(state['sleep'][0])
+    short = {**previous, 'id': USER, 'started_at': '2026-11-15T14:59:00Z',
+             'ended_at': NOW.isoformat(), 'duration_seconds': 60}
+    state['sleep'] = [short]
+    unavailable = c.get(PATH, headers=HEADERS).json()
+    assert unavailable['score'] is None and unavailable['data_quality'] == 'unavailable'
+    state['sleep'] = [previous, short]
+    result = c.get(PATH, headers=HEADERS).json()
+    assert result['score'] == original['score']
+    assert result['forecast'] == original['forecast']
+    assert len(state['sleep']) == 2  # Prediction never deletes short history.
+
+
+def test_thirty_minute_session_qualifies_through_the_api(api):
+    c, state = api
+    state['sleep'][0].update(started_at='2026-11-15T14:30:00Z', ended_at=NOW.isoformat(), duration_seconds=1800)
+    result = c.get(PATH, headers=HEADERS).json()
+    assert result['score'] is not None and result['data_quality'] == 'limited'
+    assert result['parameters']['min_main_sleep_minutes'] == 30

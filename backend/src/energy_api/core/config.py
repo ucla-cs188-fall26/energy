@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Energy API"
     debug: bool = False
+    environment: Literal["production", "development", "test"] = "production"
     prediction: PredictionParameters = Field(default_factory=PredictionParameters)
     cors_origins: list[str] = ["http://localhost:8081", "http://127.0.0.1:8081"]
     supabase_url: AnyHttpUrl | None = Field(default=None, validation_alias="SUPABASE_URL")

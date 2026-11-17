@@ -3,10 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MIN_MAIN_SLEEP_MINUTES = 30
+
 
 class PredictionParameters(BaseModel):
     """Published time constants; score amplitudes/onset/coverage are MVP heuristics."""
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    # Product qualification rule, not a physiological claim.
+    min_main_sleep_minutes: int = Field(default=MIN_MAIN_SLEEP_MINUTES, ge=1, le=1440)
     wake_tau_hours: float = Field(default=18.2, gt=0)
     sleep_tau_hours: float = Field(default=4.2, gt=0)
     caffeine_half_life_hours: float = Field(default=5, gt=0)
@@ -31,7 +35,7 @@ class PredictionPoint(BaseModel):
 
 class EnergyPrediction(PredictionPoint):
     model_type: str = 'two_process_heuristic'
-    model_version: str = '1.0.0'
+    model_version: str = '1.1.0'
     timezone: str
     forecast: list[PredictionPoint]
     data_quality: Literal['limited', 'unavailable']

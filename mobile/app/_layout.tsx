@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 import { useSyncOnboardingProfile } from "@/features/onboarding/sync";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { EmailAuthProvider, useEmailAuth } from "@/hooks/useEmailAuth";
+import { useDevelopmentSimulation } from "@/services/development-simulation";
 import { changeTrackingOwner } from "@/services/tracking-scope";
 import { useSleepStore } from "@/features/sleep/store";
 import { useCaffeineStore } from "@/features/caffeine/store";
@@ -26,6 +27,7 @@ function Navigation() {
     useSleepStore.getState().reset();
     useCaffeineStore.getState().reset();
     useTrackingSync.getState().reset();
+    if (typeof __DEV__ !== "undefined" && __DEV__) useDevelopmentSimulation.getState().reset();
     if (session && !recovery) void useTrackingSync.getState().refresh();
   }, [session?.user.id, recovery]);
   // Clear the cached profile on sign-out only. While the stored session is still

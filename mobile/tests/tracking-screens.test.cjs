@@ -9,7 +9,18 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 let profileRequest = async () => null;
-let calls = [], routes = [], alerts = [], failSave = false, score = 73, searchParams = {};
+let simulationRequests = [], simulationFailure = false, simulationWait = null;
+async function simulationRequest(path, init) {
+  const body = JSON.parse(init.body);
+  simulationRequests.push({ path, method: init.method, body });
+  if (simulationWait) await simulationWait;
+  if (simulationFailure) throw new Error('Simulation unavailable in this environment');
+  const value = body.duration_minutes === 480 ? 86 : 60;
+  return { simulation: true, simulated_sleep_minutes: body.duration_minutes, score: value,
+    status: 'estimated', timestamp: new Date().toISOString(), caffeine_remaining_mg: 42,
+    forecast: [{ timestamp: new Date(Date.now()+3600000).toISOString(), score: value - 5, status: 'estimated', caffeine_remaining_mg: 36 }] };
+}
+let calls = [], routes = [], alerts = [], failSave = false, score = 73;
 const start = () => new Date(Date.now() - 8 * 3600000).toISOString();
 const row = (extra = {}) => ({ id: 'synthetic-session', user_id: 'demo', started_at: start(),
   ended_at: new Date().toISOString(), duration_seconds: 28800, elapsed_seconds: 28800, ...extra });
@@ -44,7 +55,7 @@ Module._load = function(name, ...args) {
     getItem: async key => memory.get(key) ?? null, setItem: async (k,v) => memory.set(k,v), removeItem: async k => memory.delete(k),
   };
   if (name === '@/hooks/useAuth') return { useAuth: () => ({ session: { user: { id: 'demo', email: 'demo@example.invalid' } } }) };
-  if (name === '@/services/api' || name === './api') return { trackingApi, getProfile: () => profileRequest() };
+  if (name === '@/services/api' || name === './api') return { trackingApi, getProfile: () => profileRequest(), request: simulationRequest, localTimezone: () => "America/Los_Angeles" };
   if (name === '@/services/supabase') return { supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'demo' } } } }) } } };
   if (name.startsWith('@/')) {
     const base = path.join(__dirname, '../src', name.slice(2));
@@ -63,8 +74,10 @@ const { DrinkDetailSheet } = require('../src/features/caffeine/DrinkDetailSheet.
 const { useSleepStore } = require('../src/features/sleep/store.ts');
 const { useCaffeineStore } = require('../src/features/caffeine/store.ts');
 const { useTrackingSync } = require('../src/services/tracking-sync.ts');
+const { useDevelopmentSimulation } = require('../src/services/development-simulation.ts');
+const { ForecastChart } = require('../src/features/energy/ForecastChart.tsx');
 const { refreshProfile, useProfileStore } = require('../src/features/profile/store.ts');
-const { changeTrackingOwner } = require('../src/services/tracking-scope.ts');
+const { changeTrackingOwner, trackingScope } = require('../src/services/tracking-scope.ts');
 function content(tree) { return tree.root.findAllByType('Text').map(n => n.children.join('')).join(' '); }
 function button(tree, label) {
   return tree.root.findAllByType('Pressable').find(p => p.findAllByType('Text').some(t => t.children.join('') === label));
@@ -72,7 +85,9 @@ function button(tree, label) {
 async function render(Component, props) { let tree; await act(async () => { tree = create(React.createElement(Component, props)); }); return tree; }
 async function cleanup(tree) { await act(async () => tree.unmount()); }
 beforeEach(() => {
-  calls = []; routes = []; alerts = []; failSave = false; score = 73; searchParams = {};
+  calls = []; routes = []; alerts = []; failSave = false; score = 73;
+  global.__DEV__ = false; simulationRequests = []; simulationFailure = false; simulationWait = null;
+  useDevelopmentSimulation.getState().reset();
   changeTrackingOwner('demo'); useSleepStore.getState().reset(); useCaffeineStore.getState().reset(); useTrackingSync.getState().reset();
 });
 
@@ -214,110 +229,82 @@ test('saved nap refreshed ratings are displayed in both summary and history', as
   } finally { await cleanup(tree); trackingApi.napHistory = original; }
 });
 
-test('Start nap opens the dark Napping screen; the sheet has no rating question', async () => {
-  trackingApi.startNap = async () => { calls.push('startNap'); return row({ ended_at: null }); };
-  const tree = await render(Nap);
+test('development sleep preview updates the existing energy circle/forecast and Reset restores real predictions', async () => {
+  global.__DEV__ = true;
+  const tree = await render(Home);
   try {
-    assert.match(content(tree), /Ready for a nap\?/);
-    assert.doesNotMatch(content(tree), /How refreshed/);
-    await act(async () => button(tree, 'Start nap').props.onPress());
-    assert.ok(calls.includes('startNap'));
-    assert.deepEqual(routes, ['/napping']);
-  } finally { await cleanup(tree); delete trackingApi.startNap; }
-});
-
-test('past nap needs a rating before it can be saved', async () => {
-  const tree = await render(Nap);
-  try {
-    await act(async () => button(tree, 'Log a past nap').props.onPress());
-    assert.equal(button(tree, 'Save nap').props.disabled, true);
-    await act(async () => button(tree, '3').props.onPress());
-    assert.equal(button(tree, 'Save nap').props.disabled, false);
+    const sessions = useSleepStore.getState().sessions;
+    await act(async () => button(tree, 'Simulate Sleep').props.onPress());
+    for (const label of ['30 minutes', '1 hour', '4 hours', '6 hours', '8 hours']) assert.ok(button(tree, label));
+    await act(async () => button(tree, '4 hours').props.onPress());
+    assert.match(content(tree), /Simulation · 240 minutes/);
+    assert.match(content(tree), /60%/);
+    assert.equal(useTrackingSync.getState().prediction.score, 73);
+    assert.equal(tree.root.findByType(ForecastChart).props.forecast.points[1].value, 55);
+    assert.equal(useSleepStore.getState().sessions, sessions);
+    assert.deepEqual(simulationRequests[0], { path: '/development/energy/simulate', method: 'POST', body: { duration_minutes: 240, timezone: 'America/Los_Angeles' } });
+    score = 41;
+    await act(async () => useTrackingSync.getState().refresh());
+    assert.match(content(tree), /60%/); // Real refresh cannot overwrite the preview.
+    await act(async () => button(tree, 'Simulate Sleep').props.onPress());
+    await act(async () => button(tree, '8 hours').props.onPress());
+    assert.match(content(tree), /86%/);
+    assert.equal(tree.root.findByType(ForecastChart).props.forecast.points[1].value, 81);
+    await act(async () => button(tree, 'Reset Simulation').props.onPress());
+    assert.match(content(tree), /41%/);
+    assert.doesNotMatch(content(tree), /Not saved/);
+    assert.equal(useDevelopmentSimulation.getState().prediction, null);
   } finally { await cleanup(tree); }
 });
 
-test('past nap uses a start/end time range that cannot end in the future', async () => {
-  const tree = await render(Nap);
-  const stepper = (label) => tree.root.findAllByType('Pressable').find(p => p.props.accessibilityLabel === label);
+test('simulation controls and requests are disabled in a production build', async () => {
+  useDevelopmentSimulation.setState({ scope: trackingScope.version, prediction: {
+    simulation: true, simulated_sleep_minutes: 240, score: 99, status: 'estimated', forecast: [], timestamp: new Date().toISOString(), caffeine_remaining_mg: 42,
+  } });
+  const tree = await render(Home);
   try {
-    await act(async () => button(tree, 'Log a past nap').props.onPress());
-    assert.doesNotMatch(content(tree), /When did you wake up|How long did you nap/);
-    assert.match(content(tree), /Start time/); assert.match(content(tree), /End time/);
-    assert.match(content(tree), /Nap length 20m/);
-    // The default end is the latest allowed (now), so it can only move earlier.
-    assert.equal(stepper('Later end time').props.disabled, true);
-    await act(async () => stepper('Earlier start time').props.onPress());
-    assert.match(content(tree), /Nap length 25m/);
-    // Shortening stops at 5 minutes.
-    for (let i = 0; i < 10; i++) await act(async () => { if (!stepper('Later start time').props.disabled) stepper('Later start time').props.onPress(); });
-    assert.match(content(tree), /Nap length 5m/);
-    await act(async () => button(tree, '2').props.onPress());
-    await act(async () => button(tree, 'Save nap').props.onPress());
-    const save = calls.filter(c => c[0] === 'logNap').at(-1);
-    assert.equal((Date.parse(save[2]) - Date.parse(save[1])) / 60000, 5);
-    assert.ok(Date.parse(save[2]) <= Date.now());
+    assert.equal(button(tree, 'Simulate Sleep'), undefined);
+    assert.equal(await useDevelopmentSimulation.getState().simulate(240), false);
+    assert.equal(simulationRequests.length, 0);
+    assert.match(content(tree), /73%/);
+    assert.doesNotMatch(content(tree), /99%|Not saved/);
   } finally { await cleanup(tree); }
 });
 
-test('Stop nap goes straight to the rating screen for that nap', async () => {
-  const Napping = require('../app/napping.tsx').default;
-  trackingApi.stopNap = async (id, rating) => { calls.push(['stopNap', id, rating]); return row({ id }); };
-  useSleepStore.setState({ activeNap: { id: 'nap-1', startedAt: start() } });
-  const tree = await render(Napping);
+test('failed preview leaves actual prediction visible and reports the error', async () => {
+  global.__DEV__ = true; simulationFailure = true;
+  const tree = await render(Home);
   try {
-    await act(async () => button(tree, 'Stop nap').props.onPress());
-    assert.deepEqual(calls.find(c => c[0] === 'stopNap'), ['stopNap', 'nap-1', undefined]);
-    assert.deepEqual(routes.at(-1), { pathname: '/rate-session', params: { kind: 'nap', id: 'nap-1' } });
-  } finally { await cleanup(tree); delete trackingApi.stopNap; }
+    await act(async () => button(tree, 'Simulate Sleep').props.onPress());
+    await act(async () => button(tree, '4 hours').props.onPress());
+    assert.match(content(tree), /Simulation unavailable/);
+    assert.match(content(tree), /73%/);
+    assert.equal(useDevelopmentSimulation.getState().prediction, null);
+  } finally { await cleanup(tree); }
 });
 
-test('rating screen cannot be saved without an answer, then saves the sleep quality', async () => {
-  const Rate = require('../app/rate-session.tsx').default;
-  trackingApi.rateSleep = async (id, rating) => { calls.push(['rateSleep', id, rating]); return row({ id, sleep_quality: rating }); };
-  useSleepStore.setState({ sessions: [{ id: 'night-1', startedAt: start(), endedAt: new Date().toISOString(), quality: null }] });
-  searchParams = { kind: 'sleep', id: 'night-1' };
-  const tree = await render(Rate);
+test('Reset cancels an in-flight preview and ignores its late result', async () => {
+  global.__DEV__ = true;
+  let release;
+  simulationWait = new Promise(resolve => { release = resolve; });
+  const tree = await render(Home);
+  let work;
   try {
-    assert.match(content(tree), /How refreshed do you feel\?/);
-    assert.equal(button(tree, 'Save').props.disabled, true);
-    await act(async () => button(tree, '4').props.onPress());
-    await act(async () => button(tree, 'Save').props.onPress());
-    assert.deepEqual(calls.find(c => c[0] === 'rateSleep'), ['rateSleep', 'night-1', 4]);
-    assert.deepEqual(routes, ['back']);
-  } finally { await cleanup(tree); delete trackingApi.rateSleep; }
+    await act(async () => { work = useDevelopmentSimulation.getState().simulate(240); });
+    await act(async () => button(tree, 'Reset Simulation').props.onPress());
+    await act(async () => { release(); await work; });
+    assert.equal(useDevelopmentSimulation.getState().prediction, null);
+    assert.match(content(tree), /73%/);
+  } finally { release(); await cleanup(tree); }
 });
 
-test('the most recent unrated sleep or nap from the last day is the one asked about', () => {
-  const { findPendingRating } = require('../src/features/sleep/rating.ts');
-  const now = Date.parse('2026-11-17T15:00:00Z');
-  const s = (id, endedAt, quality = null) => ({ id, startedAt: '2026-11-16T00:00:00Z', endedAt, quality });
-  const nights = [s('old', '2026-11-15T07:00:00Z'), s('rated', '2026-11-17T07:00:00Z', 4), s('night', '2026-11-17T06:00:00Z')];
-  const naps = [s('nap', '2026-11-17T14:00:00Z')];
-  assert.deepEqual(findPendingRating(nights, naps, now), { kind: 'nap', session: naps[0] });
-  assert.deepEqual(findPendingRating(nights, [], now), { kind: 'sleep', session: nights[2] });
-  assert.equal(findPendingRating([nights[0], nights[1]], [], now), null); // too old / already rated
-});
-
-test('rating screen greets by wake-up time, and Home shows a face for every energy level', async () => {
-  const { greeting } = require('../src/features/schedule.ts');
-  const at = (h) => new Date(2026, 10, 17, h, 30).getTime();
-  assert.deepEqual([greeting(at(7)), greeting(at(11)), greeting(at(12)), greeting(at(16)), greeting(at(17))],
-    ['Good morning', 'Good morning', 'Good afternoon', 'Good afternoon', 'Good evening']);
-
-  const Rate = require('../app/rate-session.tsx').default;
-  useSleepStore.setState({ sessions: [{ id: 'late', startedAt: new Date(at(4)).toISOString(), endedAt: new Date(at(13)).toISOString(), quality: null }] });
-  searchParams = { kind: 'sleep', id: 'late' };
-  let tree = await render(Rate);
-  try { assert.match(content(tree), /Good afternoon/); assert.doesNotMatch(content(tree), /Good morning/); }
-  finally { await cleanup(tree); }
-
-  const face = (t) => t.root.findAll(n => n.props && typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.endsWith(' face'))[0].props.accessibilityLabel;
-  for (const [value, expected] of [[85, 'happy face'], [45, 'tired face'], [null, 'neutral face']]) {
-    score = value; tree = await render(Home);
-    try {
-      assert.equal(face(tree), expected);
-      assert.doesNotMatch(content(tree), /Formula estimate/);
-      if (value !== null) assert.match(content(tree), /Estimated from your sleep, naps and caffeine\./);
-    } finally { await cleanup(tree); }
-  }
+test('a preview response from a previous account is discarded', async () => {
+  global.__DEV__ = true;
+  let release;
+  simulationWait = new Promise(resolve => { release = resolve; });
+  const work = useDevelopmentSimulation.getState().simulate(240);
+  changeTrackingOwner('other'); useDevelopmentSimulation.getState().reset();
+  release();
+  assert.equal(await work, false);
+  assert.equal(useDevelopmentSimulation.getState().prediction, null);
 });

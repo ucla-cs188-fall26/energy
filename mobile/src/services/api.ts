@@ -28,7 +28,7 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
-async function request<T>(path: string, init: RequestInit, failure: string, expectedUserId?: string): Promise<T> {
+export async function request<T>(path: string, init: RequestInit, failure: string, expectedUserId?: string): Promise<T> {
   const url = process.env.EXPO_PUBLIC_API_URL;
   if (!url) throw new Error("Set EXPO_PUBLIC_API_URL in mobile/.env");
   const { data: { session }, error } = await supabase.auth.getSession();

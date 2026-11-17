@@ -34,6 +34,7 @@ Module._load = function (name, ...args) {
   if (name === '@/hooks/useAuth') return { AuthProvider: passthrough, useAuth: () => auth };
   if (name === '@/hooks/useEmailAuth') return { EmailAuthProvider: passthrough, useEmailAuth: () => email };
   if (name === '@/services/auth-links') return { AUTHENTICATED_DESTINATION: '/(tabs)' };
+  if (name === '@/services/development-simulation') return { useDevelopmentSimulation: { getState: () => ({ reset() {} }) } };
   if (name === '@/services/tracking-scope') return { changeTrackingOwner: () => {} };
   if (name === '@/services/tracking-sync') return { useTrackingSync: { getState: () => ({ reset() {}, refresh: async () => {} }) } };
   if (name === '@/features/sleep/store') return { useSleepStore: { getState: () => ({ reset() {} }) } };

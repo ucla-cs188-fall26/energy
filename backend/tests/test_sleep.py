@@ -254,3 +254,15 @@ def test_sleep_openapi_routes():
     assert BASE + '/start' in schema['paths']
     assert BASE + '/{session_id}/stop' in schema['paths']
     assert schema['paths'][BASE + '/start']['post']['security'] == [{'HTTPBearer': []}]
+
+
+def test_one_minute_session_is_still_saved_and_returned_in_history(api):
+    c, _ = api
+    response = c.post(BASE + '/start', headers=HEADERS, json={'started_at': '2026-11-14T07:59:00Z'})
+    assert response.status_code == 201
+    identity = response.json()['id']
+    stopped = c.post(BASE + '/' + identity + '/stop', headers=HEADERS, json={})
+    assert stopped.status_code == 200
+    assert stopped.json()['duration_seconds'] == 60
+    history = c.get(BASE, headers=HEADERS).json()['items']
+    assert any(row['id'] == identity and row['duration_seconds'] == 60 for row in history)

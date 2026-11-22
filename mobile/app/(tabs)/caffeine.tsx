@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Card } from "@/components/Card";
 import { CaffeineChart } from "@/features/caffeine/CaffeineChart";
-import { DRINK_CATEGORIES, PRESET_IDS, servingMl } from "@/features/caffeine/catalog";
+import { categoryForEntryName, DRINK_CATEGORIES, PRESET_IDS, servingMl } from "@/features/caffeine/catalog";
+import { DrinkDetailSheet } from "@/features/caffeine/DrinkDetailSheet";
 import { BEDTIME_OK_MG, DAILY_LIMIT_MG } from "@/features/caffeine/model";
 import { useCaffeineStore, useTodayEntries } from "@/features/caffeine/store";
 import { CaffeineEntry } from "@/features/caffeine/types";
@@ -17,7 +18,6 @@ import { colors } from "@/utils/theme";
 
 import { useTrackingRefresh } from "@/hooks/useTrackingRefresh";
 import { SyncStatus } from "@/components/SyncStatus";
-import { PrimaryButton } from "@/features/onboarding/components/PrimaryButton";
 const SUCCESS = "#15803D";
 const SUCCESS_SOFT = "#E7F6EC";
 const WARN = "#B45309";
@@ -41,11 +41,8 @@ export default function CaffeineScreen() {
   useTrackingRefresh();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<CaffeineEntry | null>(null);
-  const [editMg, setEditMg] = useState("");
-  const [editName, setEditName] = useState("");
-  const [editMl, setEditMl] = useState("");
   const [history, setHistory] = useState(false);
-  const { entries, presets, updateEntry } = useCaffeineStore();
+  const { entries, presets } = useCaffeineStore();
   const items = history ? [...entries].sort((a,b) => b.consumedAt.localeCompare(a.consumedAt)) : null;
   async function perform(work: () => Promise<void>) {
     if (busy) return;
@@ -77,15 +74,6 @@ export default function CaffeineScreen() {
         <Text style={styles.title} accessibilityRole="header">Caffeine</Text>
 
         <SyncStatus />
-        {editing ? <Card style={styles.gap}>
-          <Text style={styles.cardTitle}>Edit drink</Text>
-          <TextInput accessibilityLabel="Drink name" value={editName} onChangeText={setEditName} style={{ color: colors.text, padding: 12 }} maxLength={150} />
-          <TextInput accessibilityLabel="Caffeine mg" value={editMg} onChangeText={setEditMg} keyboardType="decimal-pad" style={{ color: colors.text, padding: 12 }} />
-          <TextInput accessibilityLabel="Serving ml" value={editMl} onChangeText={setEditMl} keyboardType="decimal-pad" style={{ color: colors.text, padding: 12 }} />
-          <PrimaryButton title="Save changes" disabled={busy || !editName.trim() || !editMg.trim() || !Number.isFinite(Number(editMg)) || Number(editMg) < 0 || Number(editMg) > 1500 || !Number.isFinite(Number(editMl)) || Number(editMl) <= 0}
-            onPress={() => void perform(async () => { await updateEntry({ ...editing, name: editName.trim(), mg: Number(editMg), servingSizeMl: Number(editMl) }); setEditing(null); })} />
-          <Pressable onPress={() => setEditing(null)}><Text style={styles.link}>Cancel</Text></Pressable>
-        </Card> : null}
         <Card style={styles.gap}>
           <View style={styles.todayRow}>
             <View>
@@ -107,7 +95,7 @@ export default function CaffeineScreen() {
               <Text style={styles.tileValue}>{summary.inSystemMg} mg</Text>
             </View>
             <View style={[styles.tile, { backgroundColor: bedtimeOk ? SUCCESS_SOFT : WARN_SOFT }]}>
-              <Text style={styles.tileLabel}>At {formatHour(summary.bedtime)} bedtime</Text>
+              <Text style={styles.tileLabel}>{summary.bedtime === null ? "At bedtime" : `At ${formatHour(summary.bedtime)} bedtime`}</Text>
               <Text style={[styles.tileValue, { color: bedtimeOk ? SUCCESS : WARN }]}>{summary.atBedtimeMg} mg</Text>
             </View>
           </View>
@@ -116,7 +104,8 @@ export default function CaffeineScreen() {
         <Card>
           <Text style={styles.cardTitle}>Caffeine in your system</Text>
           <View style={styles.chart}>
-            <CaffeineChart points={summary.curve} now={now} bedtime={summary.bedtime} />
+            <CaffeineChart points={summary.curve} now={summary.chartNow}
+              bedtime={summary.bedtime} bedMg={summary.atBedtimeMg} empty={summary.noRecentDoses} />
           </View>
         </Card>
 
@@ -176,7 +165,7 @@ export default function CaffeineScreen() {
                   <Text style={styles.muted}>{history ? new Date(e.consumedAt).toLocaleDateString() + " · " : ""}{formatTime(Date.parse(e.consumedAt))}</Text>
                 </View>
                 <Text style={styles.drinkMg}>{e.mg} mg</Text>
-                <Pressable disabled={busy} accessibilityLabel={`Edit ${e.name}`} onPress={() => { setEditing(e); setEditMg(String(e.mg)); setEditName(e.name); setEditMl(String(e.servingSizeMl ?? "")); }}>
+                <Pressable disabled={busy} accessibilityLabel={`Edit ${e.name}`} onPress={() => setEditing(e)}>
                   <Ionicons name="create-outline" size={20} color={colors.primary} />
                 </Pressable>
                 <Pressable onPress={() => confirmDelete(e)} hitSlop={10} disabled={busy} accessibilityLabel={`Delete ${e.name}`}>
@@ -189,6 +178,14 @@ export default function CaffeineScreen() {
           <Card><Text style={styles.muted}>{history ? "No drinks logged yet." : "No drinks logged yet today."}</Text></Card>
         )}
       </ScrollView>
+
+      {/* Editing uses the same sheet as logging a new drink. */}
+      <DrinkDetailSheet
+        category={editing ? categoryForEntryName(editing.name) : null}
+        entry={editing}
+        onClose={() => setEditing(null)}
+        onLogged={() => setEditing(null)}
+      />
     </SafeAreaView>
   );
 }

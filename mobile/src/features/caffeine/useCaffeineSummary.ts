@@ -1,11 +1,10 @@
 import { useMemo } from "react";
 
 import { useProfileSettings } from "@/features/profile/store";
-import { wakingDay } from "@/features/schedule";
-import { caffeineCurve, mgInSystem } from "./model";
+import { nextBedtime, wakingDay } from "@/features/schedule";
+import { noRecentDoses, sampleWindow } from "./chartWindow";
+import { mgInSystem } from "./model";
 import { useCaffeineStore, useTodayTotalMg } from "./store";
-
-const HOUR = 3_600_000;
 
 /** Caffeine numbers for the current waking day, shared by Home, Sleep and Caffeine. */
 export function useCaffeineSummary(now: number) {
@@ -13,20 +12,24 @@ export function useCaffeineSummary(now: number) {
   const todayMg = useTodayTotalMg(now);
   const { wakeMinutes, bedtimeMinutes } = useProfileSettings();
 
+  // Recomputes when doses change and on each clock tick (useNow, ~1 min), never per frame.
   return useMemo(() => {
     // Recompute immediately on mutations, without waiting for the clock tick.
     const current = Math.max(now, Date.now());
-    const { wake, bedtime } = wakingDay(wakeMinutes, bedtimeMinutes, current);
-    // Show an hour past bedtime, or a little past now if the user is up late.
-    const end = Math.max(bedtime + HOUR, current + HOUR / 2);
+    const { wake } = wakingDay(wakeMinutes, bedtimeMinutes, current);
+    // Always the upcoming bedtime, so this is a projection, never a past value.
+    const bedtime = nextBedtime(bedtimeMinutes, current);
+    const inSystem = mgInSystem(entries, current);
     return {
       todayMg,
-      inSystemMg: Math.round(mgInSystem(entries, current)),
-      // Bedtime already passed: report what's in the system now instead.
-      atBedtimeMg: Math.round(mgInSystem(entries, Math.max(bedtime, current))),
+      inSystemMg: Math.round(inSystem),
+      atBedtimeMg: Math.round(bedtime === null ? inSystem : mgInSystem(entries, bedtime)),
       wake,
       bedtime,
-      curve: caffeineCurve(entries, wake, end),
+      /** Center of the chart window; the curve's middle sample. */
+      chartNow: current,
+      curve: sampleWindow(entries, current),
+      noRecentDoses: noRecentDoses(entries, current),
     };
   }, [entries, todayMg, wakeMinutes, bedtimeMinutes, now]);
 }

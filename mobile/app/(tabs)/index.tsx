@@ -100,7 +100,9 @@ export default function HomeScreen() {
           <StatCard
             icon="cafe-outline"
             label="In system now"
-            value={`${prediction ? Math.round(prediction.caffeine_remaining_mg) : caffeine.inSystemMg} mg`}
+            // Same local calculation as the Caffeine and Sleep tabs, so every screen shows one number.
+            // The backend computes the same value (checked in backend-contract.test.cjs) for the energy score.
+            value={`${caffeine.inSystemMg} mg`}
             detail={`${caffeine.todayMg} mg today`}
           />
         </View>

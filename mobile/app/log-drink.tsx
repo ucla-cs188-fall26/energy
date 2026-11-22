@@ -39,21 +39,29 @@ export default function LogDrinkScreen() {
         <View style={styles.grid}>
           {rows.map((row, i) => (
             <View key={i} style={styles.row}>
-              {row.map((c) => (
-                <Pressable
-                  key={c.id}
-                  onPress={() => setCategory(c)}
-                  style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
-                  accessibilityRole="button"
-                >
-                  <View style={styles.iconTile}>
-                    <Ionicons name={c.icon} size={30} color={colors.primary} />
-                  </View>
-                  <Text style={styles.tileLabel} numberOfLines={2}>
-                    {c.name}
-                  </Text>
-                </Pressable>
-              ))}
+              {row.map((c) => {
+                // "Other" (custom drink) is filled purple so it stands out from the presets.
+                const other = c.id === "other";
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setCategory(c)}
+                    style={({ pressed }) => [
+                      styles.tile,
+                      other && styles.otherTile,
+                      pressed && (other ? styles.otherTilePressed : styles.tilePressed),
+                    ]}
+                    accessibilityRole="button"
+                  >
+                    <View style={[styles.iconTile, other && styles.otherIconTile]}>
+                      <Ionicons name={c.icon} size={30} color={other ? "#fff" : colors.primary} />
+                    </View>
+                    <Text style={[styles.tileLabel, other && styles.otherTileLabel]} numberOfLines={2}>
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
               {/* Keep tiles in a short last row the same width as the others. */}
               {Array.from({ length: COLUMNS - row.length }, (_, j) => <View key={`pad-${j}`} style={styles.pad} />)}
             </View>
@@ -111,5 +119,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tileLabel: { fontSize: 16, fontWeight: "700", color: colors.text, textAlign: "center" },
+  otherTile: { backgroundColor: colors.primary, borderColor: colors.primary },
+  otherTilePressed: { opacity: 0.85 },
+  otherIconTile: { backgroundColor: "rgba(255,255,255,0.2)" },
+  otherTileLabel: { color: "#fff" },
   pad: { flex: 1 },
 });

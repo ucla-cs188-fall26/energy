@@ -123,6 +123,17 @@ export const DRINK_CATEGORIES: DrinkCategory[] = [
   { id: "other", name: "Other", icon: "add-circle-outline", options: [] },
 ];
 
+/**
+ * The catalog category a logged drink came from, matched by its saved name
+ * ("Label (size)"). Drinks that don't match open as "Other" with their name editable.
+ */
+export function categoryForEntryName(name: string): DrinkCategory {
+  return (
+    DRINK_CATEGORIES.find((c) => c.options.some((o) => `${o.label} (${o.size})` === name)) ??
+    DRINK_CATEGORIES.find((c) => c.id === "other")!
+  );
+}
+
 export function categoryIcon(categoryId?: string): DrinkCategory["icon"] {
   return DRINK_CATEGORIES.find((c) => c.id === categoryId)?.icon ?? "cafe-outline";
 }

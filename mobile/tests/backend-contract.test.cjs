@@ -177,6 +177,32 @@ test('check-ins persist separately and live prediction includes real caffeine an
   assert.ok(sync.getState().prediction);
 });
 
+test('backend caffeine_remaining_mg matches the app mgInSystem now and across the forecast', async () => {
+  const { mgInSystem, HALF_LIFE_MINUTES } = require('../src/features/caffeine/model.ts');
+  const hoursAgo = h => new Date(Date.now() - h * 3600000).toISOString();
+  const added = [['Parity espresso', 63.5, 0.25], ['Parity cold brew', 200, 3], ['Parity tea', 47.25, 9]];
+  for (const [name, mg, h] of added) {
+    await caffeine.getState().addEntry({ name, mg, servingSizeMl: 250, consumedAt: hoursAgo(h), durationMinutes: 0 });
+  }
+  try {
+    await caffeine.getState().refresh();
+    const entries = caffeine.getState().entries;
+    const prediction = await api.trackingApi.prediction();
+    // The backend only reads the last 7 days of drinks; anything older is negligible after 7 days.
+    const recent = entries.filter(e => Date.parse(prediction.timestamp) - Date.parse(e.consumedAt) <= 7 * 86400000);
+    const points = [prediction, ...prediction.forecast];
+    assert.ok(points.length > 1, 'forecast should include future points');
+    for (const p of points) {
+      const app = mgInSystem(recent, Date.parse(p.timestamp));
+      assert.ok(Math.abs(p.caffeine_remaining_mg - app) < 0.01,
+        `at ${p.timestamp}: backend ${p.caffeine_remaining_mg} mg vs app ${app} mg (half-life ${HALF_LIFE_MINUTES} min)`);
+    }
+    assert.ok(prediction.caffeine_remaining_mg > 200);
+  } finally {
+    for (const e of caffeine.getState().entries.filter(e => e.name.startsWith('Parity '))) await caffeine.getState().removeEntry(e.id);
+  }
+});
+
 test('validation, missing and invalid credentials, and cross-account ownership are enforced', async () => {
   await assert.rejects(api.trackingApi.checkin(11), e => e.status === 422);
   await assert.rejects(api.trackingApi.addCaffeine({ beverage_name: 'bad', caffeine_mg: 10,

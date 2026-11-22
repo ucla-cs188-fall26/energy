@@ -95,7 +95,10 @@ test('dashboard shows the API score, real quality and caffeine, with a safe empt
   const tree = await render(Home);
   try {
     assert.match(content(tree), /73%/); assert.match(content(tree), /Quality 2\/5/);
-    assert.match(content(tree), /42 mg/); assert.doesNotMatch(content(tree), /4\/5/);
+    assert.doesNotMatch(content(tree), /4\/5/);
+    // "In system now" uses the app's own calculation (no drinks here), not the backend's 42 mg.
+    const texts = tree.root.findAllByType('Text').map(n => n.children.join(''));
+    assert.ok(texts.includes('0 mg')); assert.ok(!texts.includes('42 mg'));
     failSave = true;
     await act(async () => button(tree, 'Start sleep').props.onPress());
     assert.equal(routes.length, 0); assert.equal(alerts.length, 1);
@@ -126,19 +129,94 @@ test('nap form submits timestamps and refreshed rating; failed save stays on scr
   } finally { await cleanup(tree); }
 });
 
-test('custom drink requires volume, accepts decaf and sends a complete validated body', async () => {
+test('custom drink has optional fl oz volume, accepts decaf and sends a complete validated body', async () => {
   let logged = 0;
   const tree = await render(DrinkDetailSheet, { category: { id: 'other', name: 'Other', options: [] }, onClose() {}, onLogged() { logged++; } });
   try {
     const inputs = tree.root.findAllByType('TextInput');
+    assert.equal(button(tree, 'Enter caffeine amount').props.disabled, true);
     await act(async () => { inputs[0].props.onChangeText('Demo decaf'); inputs[1].props.onChangeText('0'); });
-    assert.equal(button(tree, 'Enter caffeine and serving volume').props.disabled, true);
-    await act(async () => inputs[2].props.onChangeText('237'));
+    // Volume is optional: a blank field still sends the API a serving size (8 fl oz).
     await act(async () => button(tree, 'Log 0 mg').props.onPress());
-    const body = calls.find(c => c[0] === 'addCaffeine')[1];
+    let body = calls.find(c => c[0] === 'addCaffeine')[1];
     assert.equal(body.beverage_name, 'Demo decaf'); assert.equal(body.caffeine_mg, 0);
-    assert.equal(body.serving_size_ml, 237); assert.equal(body.logging_method, 'manual'); assert.equal(logged, 1);
+    assert.equal(body.serving_size_ml, 236.59); assert.equal(body.logging_method, 'manual'); assert.equal(logged, 1);
+    calls = [];
+    await act(async () => inputs[2].props.onChangeText('12'));
+    await act(async () => button(tree, 'Log 0 mg').props.onPress());
+    body = calls.find(c => c[0] === 'addCaffeine')[1];
+    assert.equal(body.serving_size_ml, 354.88);
+    // "When did you start drinking?" defaults to Now.
+    assert.ok(Math.abs(Date.parse(body.consumed_at) - Date.now()) < 5000);
+    assert.ok(content(tree).includes('When did you start drinking?'));
   } finally { await cleanup(tree); }
+});
+
+test('drink time can be typed in with "Other time…"', async () => {
+  const tree = await render(DrinkDetailSheet, { category: { id: 'other', name: 'Other', options: [] }, onClose() {}, onLogged() {} });
+  try {
+    await act(async () => { const i = tree.root.findAllByType('TextInput'); i[0].props.onChangeText('Morning tea'); i[1].props.onChangeText('40'); });
+    await act(async () => button(tree, 'Now').props.onPress());
+    assert.ok(content(tree).includes('3 hours ago')); assert.doesNotMatch(content(tree), /4 hours ago/);
+    await act(async () => button(tree, 'Other time…').props.onPress());
+    const timeInput = () => tree.root.findAllByType('TextInput').find(i => i.props.accessibilityLabel === 'Time you started drinking');
+    await act(async () => timeInput().props.onChangeText('25:00'));
+    assert.equal(button(tree, 'Enter a valid time').props.disabled, true);
+    // A time later than now is rejected.
+    const later = new Date(Date.now() + 2 * 3600000);
+    if (later.getDate() === new Date().getDate()) {
+      const lh = later.getHours();
+      await act(async () => timeInput().props.onChangeText(`${lh % 12 || 12}:00${lh < 12 ? 'am' : 'pm'}`));
+      assert.equal(button(tree, 'Enter a valid time').props.disabled, true);
+      assert.match(content(tree), /later than now/);
+    }
+    // Three hours ago, typed as a 12-hour clock time with an explicit am/pm.
+    const target = new Date(Date.now() - 3 * 3600000); target.setSeconds(0, 0);
+    const h = target.getHours();
+    const typed = `${h % 12 || 12}:${String(target.getMinutes()).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
+    await act(async () => timeInput().props.onChangeText(typed));
+    await act(async () => button(tree, 'Log 40 mg').props.onPress());
+    const body = calls.find(c => c[0] === 'addCaffeine')[1];
+    assert.equal(Date.parse(body.consumed_at), target.getTime());
+  } finally { await cleanup(tree); }
+});
+
+test('typed drink times are read as today and cannot be later than now', () => {
+  const { parseTypedTime, isFutureTime } = require('../src/features/caffeine/DrinkDetailSheet.tsx');
+  const now = new Date(2026, 10, 21, 15, 0).getTime();
+  assert.equal(parseTypedTime('8:30', 'AM', now), new Date(2026, 10, 21, 8, 30).getTime());
+  assert.equal(parseTypedTime('830', 'AM', now), new Date(2026, 10, 21, 8, 30).getTime());
+  assert.equal(parseTypedTime('12', 'PM', now), new Date(2026, 10, 21, 12, 0).getTime());
+  const ninePm = parseTypedTime('9 pm', 'AM', now);
+  assert.equal(ninePm, new Date(2026, 10, 21, 21, 0).getTime());
+  assert.equal(isFutureTime(ninePm, now), true);
+  assert.equal(isFutureTime(parseTypedTime('3:00', 'PM', now), now), false);
+  for (const bad of ['', '13:00', '8:75', 'abc', '0:30']) assert.equal(parseTypedTime(bad, 'AM', now), null);
+});
+
+test('edit opens the same drink sheet prefilled and keeps the original time by default', async () => {
+  const updates = [];
+  trackingApi.updateCaffeine = async (id, body) => { updates.push([id, body]); return { id, user_id: 'demo', ...body }; };
+  const { categoryForEntryName } = require('../src/features/caffeine/catalog.ts');
+  const consumedAt = new Date(Date.now() - 2 * 3600000).toISOString();
+  const entry = { id: 'drink-1', name: 'Brewed coffee (12 oz)', mg: 140, servingSizeMl: 354.88, consumedAt, durationMinutes: 0 };
+  const category = categoryForEntryName(entry.name);
+  assert.equal(category.id, 'coffee');
+  assert.equal(categoryForEntryName('Yerba mate').id, 'other');
+  let saved = 0;
+  const tree = await render(DrinkDetailSheet, { category, entry, onClose() {}, onLogged() { saved++; } });
+  try {
+    assert.ok(content(tree).includes('Edit Coffee'));
+    const inputs = tree.root.findAllByType('TextInput');
+    assert.equal(inputs[0].props.value, '140'); assert.equal(inputs[1].props.value, '12');
+    await act(async () => inputs[0].props.onChangeText('150'));
+    await act(async () => button(tree, 'Save changes').props.onPress());
+    assert.equal(updates.length, 1);
+    const [id, body] = updates[0];
+    assert.equal(id, 'drink-1'); assert.equal(body.caffeine_mg, 150);
+    assert.equal(body.beverage_name, 'Brewed coffee (12 oz)'); assert.equal(body.consumed_at, consumedAt);
+    assert.equal(saved, 1);
+  } finally { await cleanup(tree); delete trackingApi.updateCaffeine; }
 });
 
 test('sleep tab has no Last sleep card; History shows the stored quality', async () => {

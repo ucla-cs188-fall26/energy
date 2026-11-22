@@ -18,6 +18,24 @@ export function nextOccurrence(clockMinutes: number, now: number) {
 }
 
 /**
+ * The next bedtime strictly after `now`, never one in the past. Built from the
+ * local calendar date (not now + 24h), so it lands on the right clock time across
+ * DST changes. Returns null when no bedtime is set.
+ */
+export function nextBedtime(bedtimeMinutes: number | null | undefined, now: number): number | null {
+  if (bedtimeMinutes == null || !Number.isFinite(bedtimeMinutes)) return null;
+  const minutes = ((Math.round(bedtimeMinutes) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+  const at = (dayOffset: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + dayOffset);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return d.getTime();
+  };
+  const today = at(0);
+  return today > now ? today : at(1);
+}
+
+/**
  * The user's current waking day: from their most recent wake time to the
  * bedtime that follows it. Late at night (after bedtime, before wake) this is
  * still the day that just ended.

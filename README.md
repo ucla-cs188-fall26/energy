@@ -2,7 +2,7 @@
 
 EnergySync tracks sleep and caffeine and estimates your energy throughout the day.
 
-## Assignment 3: Setup and run
+## Setup and run
 
 These instructions use the iOS Simulator on macOS. Install **Python 3.11+**, **Node.js 22 (22.13 or later)**, **Xcode with an iOS Simulator**, and **CocoaPods** first. Use an Expo development build, not Expo Go.
 
